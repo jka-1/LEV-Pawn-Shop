@@ -1,0 +1,5 @@
+{
+  "name": "mern-ios-monorepo",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"]
+}
