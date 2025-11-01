@@ -29,7 +29,6 @@ The system leverages real-world “runners” who pick up an item, validate it (
 | Server | Node.js + Express |
 | Database | MongoDB |
 | Auth | JWT |
-| Repo Style | Monorepo |
 
 ---
 
