@@ -101,3 +101,14 @@ struct ImagePicker: UIViewControllerRepresentable {
         }
     }
 }
+
+NavigationLink(destination: MeetupScreen()) {
+    Text("Find Meetup Location")
+        .font(.headline)
+        .foregroundColor(.white)
+        .padding()
+        .frame(width: 200, height: 50)
+        .background(Color.orange)
+        .cornerRadius(12)
+}
+#endif
