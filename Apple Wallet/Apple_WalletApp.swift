@@ -25,7 +25,7 @@ struct Apple_WalletApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ApplePay()
         }
         .modelContainer(sharedModelContainer)
     }

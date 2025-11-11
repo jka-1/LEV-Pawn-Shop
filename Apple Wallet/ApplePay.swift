@@ -7,7 +7,7 @@
 import SwiftUI
 import PassKit
 
-struct Applepay: View {
+struct ApplePay: View {
     var body: some View {
         VStack(spacing: 25) {
             Text("LEV Pawn Shop")
