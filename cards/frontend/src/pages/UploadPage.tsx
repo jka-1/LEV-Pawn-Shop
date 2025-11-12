@@ -23,6 +23,8 @@ export default function UploadPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [ok, setOk] = React.useState<string | null>(null);
   const errorRef = React.useRef<HTMLDivElement | null>(null);
+  const [aiLoading, setAiLoading] = React.useState(false);
+  const [aiNote, setAiNote] = React.useState<string | null>(null);
 
   async function handleFileSelect(file: File) {
     setError(null); setOk(null);
@@ -88,6 +90,54 @@ export default function UploadPage() {
     }
   };
 
+  async function estimateWithAI() {
+    setError(null); setOk(null); setAiNote(null);
+    if (!draft.name.trim()) return setError("Please enter a name before estimating.");
+    if (!draft.imageUrl.trim() && !draft.description.trim()) return setError("Provide an image or description for a better estimate.");
+
+    setAiLoading(true);
+    try {
+      let location: any = null;
+      try {
+        location = await new Promise((resolve) => {
+          if (!('geolocation' in navigator)) return resolve(null);
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout: 4000 }
+          );
+        });
+      } catch {}
+
+      const resp = await fetch('/api/estimate-price', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: draft.name.trim(),
+          description: draft.description.trim(),
+          imageUrl: draft.imageUrl.trim() || undefined,
+          location
+        })
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+
+      const priceNum = Number(data.price);
+      if (Number.isFinite(priceNum)) setDraft((d) => ({ ...d, price: String(priceNum) }));
+      const range = Number.isFinite(data.low) && Number.isFinite(data.high)
+        ? `Range: $${Number(data.low).toFixed(0)}–$${Number(data.high).toFixed(0)}`
+        : '';
+      const conf = typeof data.confidence === 'number' ? `Confidence: ${(data.confidence * 100).toFixed(0)}%` : '';
+      setAiNote([`AI suggests $${priceNum.toFixed(0)} USD`, range, conf].filter(Boolean).join(' · '));
+    } catch (e: any) {
+      setError(e?.message || 'AI estimate failed.');
+      setTimeout(() => errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   return (
     <div className="page page--auth">{/* removed 'upload-page' to avoid internal scrollbars */}
       <NavBar />
@@ -123,6 +173,12 @@ export default function UploadPage() {
                   value={draft.price}
                   onChange={(e) => setDraft({ ...draft, price: e.target.value })}
                 />
+                <div style={{ marginTop: 8, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button type="button" className="btn btn--gold" onClick={estimateWithAI} disabled={aiLoading} aria-disabled={aiLoading}>
+                    {aiLoading ? 'Estimating…' : 'Estimate with AI'}
+                  </button>
+                  {aiNote && <small style={{ color: '#a9b5cb' }}>{aiNote}</small>}
+                </div>
               </div>
 
               <div>
