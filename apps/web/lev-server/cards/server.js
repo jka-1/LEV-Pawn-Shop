@@ -9,6 +9,8 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { Resend } = require('resend');
 const crypto = require('crypto');
+// Optional: built-in fetch is available on Node 18+. If not, add node-fetch.
+const hasFetch = typeof fetch === 'function';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 console.log('Resend configured:', !!process.env.RESEND_API_KEY);
@@ -38,6 +40,9 @@ const {
   COOKIE_SAME_SITE = 'lax'
 } = process.env;
 
+// Toggle email verification requirement (dev-friendly)
+const REQUIRE_EMAIL_VERIFICATION = (process.env.REQUIRE_EMAIL_VERIFICATION ?? 'true') !== 'false';
+
 // ----- MIDDLEWARE -----
 app.use(cors({ origin: APP_BASE_URL, credentials: true }));
 app.use(express.json());
@@ -46,22 +51,27 @@ app.use(cookieParser());
 // ----- DB CONNECT (once) -----
 let db, Users, Urls, EmailTokens;
 (async () => {
-  const client = new MongoClient(MONGODB_URI);
-  await client.connect();
-  db = client.db(MONGODB_DB);
-  Users = db.collection(MONGODB_USERS_COLL);
-  Urls = db.collection(MONGODB_URLS_COLL);
-  await Urls.createIndex({ createdAt: -1 });
+  if (!MONGODB_URI) {
+    console.warn('MONGODB_URI not set; skipping DB connect. Storefront endpoints will be unavailable, but AI pricing will work.');
+    return;
+  }
+  try {
+    const client = new MongoClient(MONGODB_URI);
+    await client.connect();
+    db = client.db(MONGODB_DB);
+    Users = db.collection(MONGODB_USERS_COLL);
+    Urls = db.collection(MONGODB_URLS_COLL);
+    await Urls.createIndex({ createdAt: -1 });
 
-  EmailTokens = db.collection('email_tokens');
-  await EmailTokens.createIndex({ token: 1 }, { unique: true });
-  await EmailTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+    EmailTokens = db.collection('email_tokens');
+    await EmailTokens.createIndex({ token: 1 }, { unique: true });
+    await EmailTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-  console.log(`Mongo OK → db=${MONGODB_DB}, users=${MONGODB_USERS_COLL}, urls=${MONGODB_URLS_COLL}`);
-})().catch(err => {
-  console.error('Mongo connection error:', err);
-  process.exit(1);
-});
+    console.log(`Mongo OK → db=${MONGODB_DB}, users=${MONGODB_USERS_COLL}, urls=${MONGODB_URLS_COLL}`);
+  } catch (err) {
+    console.error('Mongo connection error:', err);
+  }
+})();
 
 // ----- JWT helpers -----
 const signAccess = (p) => jwt.sign(p, JWT_ACCESS_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
@@ -99,6 +109,111 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'AccessTokenExpired' });
   }
 }
+
+/* ---------------- Gemini price estimation (new) ---------------- */
+async function fetchImageAsBase64(url) {
+  try {
+    const resp = await (hasFetch ? fetch(url) : null);
+    if (!resp || !resp.ok) return null;
+    const buf = await resp.arrayBuffer();
+    const b = Buffer.from(buf);
+    // naive mime inference (improve if needed)
+    const mime = url.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+    return { mimeType: mime, data: b.toString('base64') };
+  } catch {
+    return null;
+  }
+}
+
+async function estimatePriceWithGemini({ name, description, imageUrl, imageBase64, location }) {
+  const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('Missing GOOGLE_API_KEY (or GEMINI_API_KEY) in environment');
+  }
+
+  // Build parts: include image if provided
+  let imagePart = null;
+  if (imageBase64 && imageBase64.data) {
+    imagePart = { inline_data: { mime_type: imageBase64.mimeType || 'image/jpeg', data: imageBase64.data } };
+  } else if (imageUrl) {
+    const fetched = await fetchImageAsBase64(imageUrl);
+    if (fetched) imagePart = { inline_data: fetched };
+  }
+
+  const locText = location && (location.city || location.state || location.country || (location.lat && location.lng))
+    ? `User location: ${[location.city, location.state, location.country].filter(Boolean).join(', ') || `${location.lat},${location.lng}`}.`
+    : 'User location not provided.';
+
+  const prompt = [
+    `Role: You are a pricing assistant for a pawn shop. Task: Given an item name, description, and an image and maybe user location, estimate a fair CASH OFFER price in USD for immediate purchase and a typical LOCAL LISTING range.`,
+    `Method: Prioritize valid local searches near the provided location (Craigslist, Facebook Marketplace, OfferUp, eBay local, etc.). If no location is available, use U.S. national averages. Consider brand/model, condition, age, accessories, provenance, and demand.`,
+    `Output: Return STRICT JSON only: { "price": number, "low": number, "high": number, "currency": "USD", "confidence": number (0-1), "explanation": string, "comparables"?: [{"title": string, "source": string, "link": string, "price": number}] }`,
+    `Style: No additional text, no markdown, no units except the currency string. Do not include disclaimers; keep explanation concise and factual.`,
+    `Item name: ${name || ''}`,
+    `Description: ${description || ''}`,
+    locText
+  ].join('\n');
+
+  const body = {
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { text: prompt },
+          ...(imagePart ? [imagePart] : [])
+        ]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.4
+    }
+  };
+
+  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error(`Gemini error HTTP ${resp.status}: ${errText}`);
+  }
+  const data = await resp.json();
+  if (!data) throw lastErr || new Error('Gemini request failed');
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.candidates?.[0]?.content?.parts?.[0]?.data || '';
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    // fallback: attempt to extract JSON-like substring
+    const m = text.match(/\{[\s\S]*\}/);
+    parsed = m ? JSON.parse(m[0]) : null;
+  }
+  if (!parsed || typeof parsed.price !== 'number') {
+    throw new Error('Invalid response from Gemini');
+  }
+  return parsed;
+}
+
+app.post('/api/estimate-price', async (req, res) => {
+  try {
+    const apiKeyPresent = !!(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
+    if (!apiKeyPresent) {
+      return res.status(503).json({ error: 'ai_not_configured', message: 'Gemini API key not set' });
+    }
+    const { name, description, imageUrl, imageBase64, location } = req.body || {};
+    if (!name && !description && !imageUrl && !imageBase64) {
+      return res.status(400).json({ error: 'Missing item data' });
+    }
+    const result = await estimatePriceWithGemini({ name, description, imageUrl, imageBase64, location });
+    return res.status(200).json({ ok: true, ...result });
+  } catch (e) {
+    console.error('estimate-price error:', e);
+    return res.status(500).json({ error: e?.message || 'server_error' });
+  }
+});
 
 /* ---------------- Storefront APIs (unchanged) ---------------- */
 app.get('/api/storefront', async (req, res) => {
@@ -315,15 +430,17 @@ app.post('/api/register', async (req, res) => {
       PasswordHash: hash,
       FirstName: firstName,
       LastName: lastName,
-      Verified: false,
+      Verified: REQUIRE_EMAIL_VERIFICATION ? false : true,
       CreatedAt: new Date()
     };
     const ins = await Users.insertOne(user);
 
-    try {
-      await createAndSendVerifyToken({ ...user, _id: ins.insertedId });
-    } catch (e) {
-      console.warn('verify email error:', e.toString());
+    if (REQUIRE_EMAIL_VERIFICATION) {
+      try {
+        await createAndSendVerifyToken({ ...user, _id: ins.insertedId });
+      } catch (e) {
+        console.warn('verify email error:', e.toString());
+      }
     }
 
     return res.status(200).json({ message: 'Registered', id: ins.insertedId.toString() });
@@ -344,7 +461,8 @@ app.post('/api/login', async (req, res) => {
     const ok = await bcrypt.compare(password, user.PasswordHash || '');
     if (!ok) return res.status(401).json({ error: 'InvalidCredentials' });
 
-    if (!user.Verified) return res.status(403).json({ error: 'EMAIL_NOT_VERIFIED' });
+    if (REQUIRE_EMAIL_VERIFICATION && !user.Verified)
+      return res.status(403).json({ error: 'EMAIL_NOT_VERIFIED' });
 
     // auth cookies
     const base = { uid: user._id.toString(), login: user.Login };

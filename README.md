@@ -32,6 +32,41 @@ The system leverages real-world “runners” who pick up an item, validate it (
 
 ---
 
+## AI Pricing (Gemini) Setup
+
+- Backend lives in `cards/server.js` and exposes `POST /api/estimate-price`.
+- The endpoint starts with or without AI configured. If the Gemini key is missing, it returns `503 { error: "ai_not_configured" }` instead of breaking the server.
+- To enable AI locally:
+  - Copy `cards/.env.example` to `cards/.env`.
+  - Set `GOOGLE_API_KEY=...` and your `MONGODB_URI`.
+  - Run backend: `node cards/server.js`; frontend: `npm run dev` in `cards/frontend`.
+
+### Deployment Safety
+
+- Secrets are not committed. Root `.gitignore` ignores `.env` files and `cards/uploads/`.
+- Pushing Gemini changes will not break servers without the key; the endpoint fails gracefully.
+- Lock the model by setting `GEMINI_MODEL` (default `gemini-2.0-flash`). Choose one your key supports.
+
+### Where environment variables live
+
+- Local development: put secrets in `cards/.env` (ignored by Git). The backend loads them via `dotenv`.
+- CI/CD and hosted servers (e.g., GitHub Actions, Render, Heroku, Vercel): configure env vars in the service’s dashboard or secrets store — do not commit `.env` to the repo.
+- Self-hosted servers: set process environment or use a secrets manager (e.g., Docker Compose `env_file`, systemd `Environment=`). Keep `.env` files out of Git.
+
+### Environment Variables
+
+See `cards/.env.example` for all variables:
+
+- `GOOGLE_API_KEY` — Gemini key (required for AI pricing).
+- `GEMINI_MODEL` — lock to a specific model for consistent outputs.
+- `APP_BASE_URL`, `PORT` — dev setup for CORS and server port.
+- `MONGODB_URI` — Atlas connection string.
+- `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` — strong strings for auth.
+- `REQUIRE_EMAIL_VERIFICATION` — set `false` in dev to skip email.
+
+
+---
+
 ## Repository Structure
 
 ```bash
