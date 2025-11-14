@@ -4,12 +4,11 @@
 //
 //  Created by Matthew Pearaylall on 11/14/25.
 //
-
 import SwiftUI
 import SwiftData
 
 struct InventoryView: View {
-    @Query(sort: \Item.createdAt, order: .reverse) var items: [Item]
+    @Query(sort: \Item.dateAdded, order: .reverse) var items: [Item]
 
     let columns = [
         GridItem(.flexible(), spacing: 12),
@@ -45,7 +44,6 @@ struct InventoryView: View {
 }
 
 struct ItemCardView: View {
-    @Environment(\.modelContext) private var context
     @Bindable var item: Item
 
     var body: some View {

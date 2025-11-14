@@ -3,8 +3,8 @@ import SwiftData
 
 struct ContentView: View {
 
-    @Query(sort: \Item.createdAt, order: .reverse) var items: [Item]
-    @Query(filter: #Predicate<Item> { $0.isInCart == true }) var cartItems: [Item]
+        @Query(sort: \Item.dateAdded, order: .reverse) var items: [Item]
+        @Query(filter: #Predicate<Item> { $0.isInCart == true }) var cartItems: [Item]
 
     var body: some View {
         NavigationStack {

@@ -20,15 +20,14 @@ struct ItemDetailView: View {
 
             ScrollView {
                 VStack(spacing: 16) {
-
                     if let data = item.imageData, let uiImage = UIImage(data: data) {
                         Image(uiImage: uiImage)
                             .resizable()
                             .scaledToFit()
                             .frame(maxHeight: 280)
                             .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .padding(.horizontal)
                             .shadow(radius: 10, y: 6)
+                            .padding(.horizontal)
                     }
 
                     Text(item.name)
@@ -40,15 +39,15 @@ struct ItemDetailView: View {
                         .font(.title2)
                         .foregroundStyle(PawnTheme.gold)
 
-                    Text("Category: \(item.category)")
-                        .foregroundStyle(.white.opacity(0.85))
-
                     Text("Condition: \(item.condition)")
                         .foregroundStyle(.white.opacity(0.85))
 
-                    if !item.details.isEmpty {
-                        Text(item.details)
-                            .foregroundStyle(.white.opacity(0.85))
+                    Text("Category: \(item.category)")
+                        .foregroundStyle(.white.opacity(0.85))
+
+                    if !item.itemDescription.isEmpty {
+                        Text(item.itemDescription)
+                            .foregroundStyle(.white.opacity(0.9))
                             .padding(.horizontal)
                     }
 
@@ -57,6 +56,7 @@ struct ItemDetailView: View {
                     } label: {
                         Label(item.isInCart ? "Remove from Cart" : "Add to Cart",
                               systemImage: item.isInCart ? "cart.badge.minus" : "cart.badge.plus")
+                            .foregroundStyle(.black)
                     }
                     .buttonStyle(PawnButtonStyle())
 
@@ -74,7 +74,7 @@ struct ItemDetailView: View {
                 .padding(.bottom, 20)
             }
         }
-        .navigationTitle("Details")
+        .navigationTitle("Item Details")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
