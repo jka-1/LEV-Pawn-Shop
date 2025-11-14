@@ -8,10 +8,11 @@
 import SwiftUI
 
 @main
-struct BigProjectUIAppApp: App {
+struct BigProjectUIApp: App {
     var body: some Scene {
         WindowGroup {
-            MainScreen()
+            ContentView()
+                .preferredColorScheme(.dark)
         }
     }
 }

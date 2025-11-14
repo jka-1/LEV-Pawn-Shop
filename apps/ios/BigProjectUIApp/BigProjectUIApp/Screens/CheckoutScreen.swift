@@ -1,9 +1,3 @@
-//
-//  CheckoutScreen.swift
-//  BigProjectUIApp
-//
-//  Created by Matthew Pearaylall on 11/13/25.
-//
 import SwiftUI
 
 struct CheckoutScreen: View {
@@ -16,44 +10,51 @@ struct CheckoutScreen: View {
     }
 
     var body: some View {
-        VStack(spacing: 30) {
-            Text("Checkout")
-                .font(.largeTitle)
-                .bold()
+        ZStack {
+            PawnTheme.background.ignoresSafeArea()
 
-            List(cartItems) { item in
-                HStack {
-                    Text(item.name)
-                    Spacer()
-                    Text("$\(item.price as NSDecimalNumber, formatter: currencyFormatter)")
+            VStack(spacing: 24) {
+                Text("Checkout")
+                    .font(.largeTitle).bold()
+                    .foregroundStyle(.white)
+
+                List(cartItems) { item in
+                    HStack {
+                        Text(item.name)
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Text("\(item.price as NSDecimalNumber, formatter: currencyFormatter)")
+                            .foregroundStyle(PawnTheme.gold)
+                    }
+                    .listRowBackground(Color.black.opacity(0.7))
                 }
-            }
-            .frame(height: 250)
+                .frame(height: 250)
+                .scrollContentBackground(.hidden)
 
-            Text("Total: \(totalPrice as NSDecimalNumber, formatter: currencyFormatter)")
-                .font(.title2)
-                .bold()
+                Text("Total: \(totalPrice as NSDecimalNumber, formatter: currencyFormatter)")
+                    .font(.title2).bold()
+                    .foregroundStyle(PawnTheme.gold)
 
-            ApplePayButton(
-                total: totalPrice,
-                label: "Pawn Items"
-            ) { success in
-                if success {
-                    paymentSuccess = true
+                ApplePayButton(
+                    total: totalPrice,
+                    label: "Pawn Items"
+                ) { success in
+                    if success {
+                        paymentSuccess = true
+                    }
                 }
-            }
-            .frame(width: 220, height: 50)
+                .frame(width: 220, height: 50)
 
-            Spacer()
+                Spacer()
+            }
+            .padding()
         }
-        .padding()
         .navigationDestination(isPresented: $paymentSuccess) {
             ConfirmationScreen()
         }
     }
 }
 
-// Formatter
 let currencyFormatter: NumberFormatter = {
     let f = NumberFormatter()
     f.numberStyle = .currency

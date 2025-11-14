@@ -1,24 +1,24 @@
-//
-//  BrowseScreen.swift
-//  BigProjectUIApp
-//
-//  Created by Charles Jorge on 11/5/25.
-//
-
 import SwiftUI
 
 struct BrowseScreen: View {
     var body: some View {
-        VStack {
-            Text("Browse the Shop")
-                .font(.title)
-                .padding()
+        ZStack {
+            PawnTheme.background.ignoresSafeArea()
 
-            Text("Store inventory UI goes here.")
-                .foregroundColor(.gray)
+            VStack(spacing: 16) {
+                Text("Browse the Shop")
+                    .font(.title)
+                    .foregroundStyle(.white)
+                    .padding(.top, 20)
 
-            Spacer()
+                Text("Store inventory UI goes here.")
+                    .foregroundStyle(.white.opacity(0.7))
+
+                Spacer()
+            }
+            .padding()
         }
         .navigationTitle("Shop")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

@@ -1,28 +1,28 @@
-//
-//  ConfirmationScreen.swift
-//  BigProjectUIApp
-//
-//  Created by Matthew Pearaylall on 11/13/25.
-//
 import SwiftUI
 
 struct ConfirmationScreen: View {
     var body: some View {
-        VStack(spacing: 25) {
-            Text("Payment Successful!")
-                .font(.largeTitle).bold()
+        ZStack {
+            PawnTheme.background.ignoresSafeArea()
 
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 80))
-                .foregroundColor(.green)
+            VStack(spacing: 25) {
+                Text("Payment Successful!")
+                    .font(.largeTitle).bold()
+                    .foregroundStyle(.white)
 
-            Text("A confirmation email has been sent.")
-                .font(.title3)
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 80))
+                    .foregroundColor(.green)
 
-            Spacer()
+                Text("A confirmation email has been sent.")
+                    .font(.title3)
+                    .foregroundStyle(.white.opacity(0.8))
+
+                Spacer()
+            }
+            .padding()
         }
-        .padding()
         .navigationTitle("Order Complete")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
-

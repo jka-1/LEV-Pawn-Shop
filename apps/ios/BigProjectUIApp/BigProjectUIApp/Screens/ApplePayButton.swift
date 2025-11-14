@@ -1,9 +1,3 @@
-//
-//  ContentView.swift
-//  Apple Wallet
-//
-//  Created by Matthew Pearaylall on 10/29/25.
-//
 import SwiftUI
 import PassKit
 
@@ -14,7 +8,9 @@ struct ApplePayButton: UIViewRepresentable {
 
     func makeUIView(context: Context) -> PKPaymentButton {
         let button = PKPaymentButton(paymentButtonType: .buy, paymentButtonStyle: .black)
-        button.addTarget(context.coordinator, action: #selector(Coordinator.startPayment), for: .touchUpInside)
+        button.addTarget(context.coordinator,
+                         action: #selector(Coordinator.startPayment),
+                         for: .touchUpInside)
         return button
     }
 
@@ -35,7 +31,6 @@ struct ApplePayButton: UIViewRepresentable {
             self.onPaymentResult = onPaymentResult
         }
 
-        // MARK: Start payment
         @objc func startPayment() {
             let request = PKPaymentRequest()
             request.merchantIdentifier = "merchant.com.matthewpearaylall.walletdemo"
@@ -44,11 +39,19 @@ struct ApplePayButton: UIViewRepresentable {
             request.countryCode = "US"
             request.currencyCode = "USD"
 
-            // Dynamic payment summary
             request.paymentSummaryItems = [
                 PKPaymentSummaryItem(label: label, amount: NSDecimalNumber(decimal: total)),
                 PKPaymentSummaryItem(label: "LEV Pawn Shop", amount: NSDecimalNumber(decimal: total))
             ]
+
+            guard
+                let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                let root = scene.windows.first?.rootViewController
+            else {
+                print("No valid window scene / rootViewController")
+                onPaymentResult(false)
+                return
+            }
 
             guard let controller = PKPaymentAuthorizationViewController(paymentRequest: request) else {
                 print("Unable to display Apple Pay Sheet.")
@@ -57,22 +60,18 @@ struct ApplePayButton: UIViewRepresentable {
             }
 
             controller.delegate = self
-            UIApplication.shared.windows.first?.rootViewController?.present(controller, animated: true)
+            root.present(controller, animated: true)
         }
 
-        // MARK: Payment Authorized
         func paymentAuthorizationViewController(
             _ controller: PKPaymentAuthorizationViewController,
             didAuthorizePayment payment: PKPayment,
             handler completion: @escaping (PKPaymentAuthorizationResult) -> Void
         ) {
-            // Send payment.token to backend here
             print("Payment Token:", payment.token)
-
             completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
         }
 
-        // MARK: Finish Payment
         func paymentAuthorizationViewControllerDidFinish(_ controller: PKPaymentAuthorizationViewController) {
             controller.dismiss(animated: true) {
                 self.onPaymentResult(true)

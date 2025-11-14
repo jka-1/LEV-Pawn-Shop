@@ -1,38 +1,35 @@
-//
-//  AddItemView.swift
-//  BigProjectUIApp
-//
-//  Created by Charles Jorge on 11/5/25.
-//
-
 import SwiftUI
 
 struct AddItemView: View {
     var body: some View {
-        VStack(spacing: 30) {
-            Text("Add a New Item")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .padding(.top, 40)
+        ZStack {
+            PawnTheme.background.ignoresSafeArea()
 
-            Text("Take a picture of the item you want to pawn.")
-                .foregroundColor(.gray)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
+            VStack(spacing: 24) {
+                Text("Add a New Item")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundStyle(.white)
+                    .padding(.top, 20)
 
-            NavigationLink(destination: CameraView()) {
-                Text("Open Camera")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
-                    .frame(width: 200, height: 50)
-                    .background(Color.black)
-                    .cornerRadius(12)
+                Text("Take a picture of the item you want to pawn so runners can verify condition.")
+                    .foregroundStyle(.white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                NavigationLink {
+                    CameraView()
+                } label: {
+                    Label("Open Camera", systemImage: "camera.fill")
+                        .foregroundStyle(.black)
+                }
+                .buttonStyle(PawnButtonStyle())
+
+                Spacer()
             }
-
-            Spacer()
+            .padding()
         }
         .navigationTitle("Add Item")
-        .padding()
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
