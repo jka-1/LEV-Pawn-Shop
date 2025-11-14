@@ -8,32 +8,60 @@
 import SwiftUI
 
 struct AuthSelectionView: View {
+
+    // MARK: - Color Theme
+    private let bgBlack = Color.black
+    private let cardDark = Color(red: 0.10, green: 0.10, blue: 0.10)   // #1A1A1A
+    private let gold = Color(red: 0.84, green: 0.65, blue: 0.27)       // #D6A645
+    private let textGray = Color.gray.opacity(0.6)
+
     var body: some View {
-        VStack(spacing: 30) {
-            Text("Runner App")
-                .font(.largeTitle)
-                .bold()
-            
-            NavigationLink(destination: LoginView()) {
-                Text("Login")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
+        ZStack {
+            bgBlack.ignoresSafeArea()
+
+            VStack(spacing: 40) {
+                // MARK: - Title
+                Text("Runner App")
+                    .font(.largeTitle.bold())
                     .foregroundColor(.white)
-                    .cornerRadius(12)
+
+                // MARK: - Card with Buttons
+                VStack(spacing: 20) {
+                    NavigationLink {
+                        LoginView()
+                    } label: {
+                        GoldButtonContent(title: "Login", icon: "lock.fill", gold: gold)
+                    }
+
+                    NavigationLink {
+                        RegisterView()
+                    } label: {
+                        GoldButtonContent(title: "Register", icon: "person.fill.badge.plus", gold: gold)
+                    }
+                }
+                .padding(25)
+                .background(cardDark)
+                .cornerRadius(22)
+                .shadow(color: .black.opacity(0.7), radius: 10, y: 3)
+                .padding(.horizontal)
+
+                Spacer()
+
+                // MARK: - Footer
+                Text("Runnr • Powered by LEV")
+                    .font(.caption)
+                    .foregroundColor(.gray.opacity(0.5))
             }
-            
-            NavigationLink(destination: RegisterView()) {
-                Text("Register")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.green)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-            }
+            .padding(.vertical, 60)
+            .padding(.horizontal, 20)
         }
-        .padding()
+    }
+}
+
+struct AuthSelectionView_Previews: PreviewProvider {
+    static var previews: some View {
+        NavigationStack {
+            AuthSelectionView()
+        }
     }
 }
