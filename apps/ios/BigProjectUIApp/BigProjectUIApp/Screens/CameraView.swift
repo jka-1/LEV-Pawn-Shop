@@ -1,109 +1,77 @@
 import SwiftUI
-import UIKit
 
 struct CameraView: View {
-    @State private var isShowingCamera = false
+    @State private var showSourceMenu = false
+    @State private var showPicker = false
+    @State private var pickerSource: UIImagePickerController.SourceType = .camera
+
     @State private var capturedImage: UIImage?
 
     var body: some View {
         ZStack {
             PawnTheme.background.ignoresSafeArea()
 
-            VStack(spacing: 16) {
+            VStack(spacing: 20) {
+
+                // Display Selected Image
                 if let image = capturedImage {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFit()
-                        .frame(maxHeight: 420)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .padding(.horizontal)
-                        .shadow(radius: 10, y: 6)
+                        .frame(maxHeight: 400)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .padding()
                 } else {
-                    VStack(spacing: 10) {
-                        Image(systemName: "photo.on.rectangle.angled")
-                            .font(.system(size: 44))
-                            .foregroundStyle(.white.opacity(0.6))
-                        Text("No item photo yet.")
-                            .foregroundStyle(.white.opacity(0.7))
-                        Text("Tip: Good lighting helps our runners verify condition.")
-                            .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.55))
-                    }
-                    .padding(.vertical, 40)
+                    Text("No photo selected.")
+                        .foregroundColor(.white.opacity(0.7))
                 }
 
+                // Choose Camera or Gallery
                 Button {
-                    isShowingCamera = true
+                    showSourceMenu = true
                 } label: {
-                    Label(capturedImage == nil ? "Take Item Photo" : "Retake Photo",
-                          systemImage: "camera.fill")
-                        .foregroundStyle(.black)
+                    Label("Take or Choose Photo", systemImage: "camera.fill")
+                        .foregroundColor(.black)
+                        .padding()
+                        .frame(width: 220, height: 50)
+                        .background(PawnTheme.gold)
+                        .cornerRadius(14)
                 }
-                .buttonStyle(PawnButtonStyle())
 
+                // Clear button
                 if capturedImage != nil {
-                    Button {
+                    Button(role: .destructive) {
                         capturedImage = nil
                     } label: {
                         Label("Clear Photo", systemImage: "trash")
                     }
-                    .buttonStyle(PawnButtonStyle(fill: .white.opacity(0.08)))
-                    .tint(.white)
+                    .padding(.top, 4)
                 }
 
                 Spacer()
             }
-            .padding(20)
+            .padding()
         }
-        .navigationTitle("Item Photos")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Image(systemName: "lock.shield.fill")
-                    .foregroundStyle(PawnTheme.gold)
-                    .accessibilityLabel("Secure")
-            }
+        .actionSheet(isPresented: $showSourceMenu) {
+            ActionSheet(
+                title: Text("Select Photo Source"),
+                buttons: [
+                    .default(Text("Camera")) {
+                        pickerSource = .camera
+                        showPicker = true
+                    },
+                    .default(Text("Photo Library")) {
+                        pickerSource = .photoLibrary
+                        showPicker = true
+                    },
+                    .cancel()
+                ]
+            )
         }
-        .sheet(isPresented: $isShowingCamera) {
-            ImagePicker(image: $capturedImage)
+        .sheet(isPresented: $showPicker) {
+            ImagePicker(image: $capturedImage, sourceType: pickerSource)
         }
-    }
-}
-
-// Shared UIKit bridge – keep ONE copy in project
-
-struct ImagePicker: UIViewControllerRepresentable {
-    @Binding var image: UIImage?
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        if UIImagePickerController.isSourceTypeAvailable(.camera) {
-            picker.sourceType = .camera
-        } else {
-            picker.sourceType = .photoLibrary
-        }
-        picker.allowsEditing = false
-        picker.delegate = context.coordinator
-        return picker
-    }
-
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-
-    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
-        let parent: ImagePicker
-        init(_ parent: ImagePicker) { self.parent = parent }
-
-        func imagePickerController(_ picker: UIImagePickerController,
-                                   didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            if let uiImage = info[.originalImage] as? UIImage {
-                parent.image = uiImage
-            }
-            picker.dismiss(animated: true)
-        }
-
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            picker.dismiss(animated: true)
-        }
+        .navigationTitle("Camera")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

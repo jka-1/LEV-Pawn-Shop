@@ -3,7 +3,8 @@ import SwiftData
 
 struct ContentView: View {
 
-    @Query var items: [Item]   // your inventory model in SwiftData
+    @Query(sort: \Item.createdAt, order: .reverse) var items: [Item]
+    @Query(filter: #Predicate<Item> { $0.isInCart == true }) var cartItems: [Item]
 
     var body: some View {
         NavigationStack {
@@ -34,6 +35,14 @@ struct ContentView: View {
                         .buttonStyle(PawnButtonStyle())
 
                         NavigationLink {
+                            InventoryView()
+                        } label: {
+                            Label("My Items", systemImage: "square.grid.2x2.fill")
+                                .foregroundStyle(.black)
+                        }
+                        .buttonStyle(PawnButtonStyle())
+
+                        NavigationLink {
                             BrowseScreen()
                         } label: {
                             Label("Browse the Shop", systemImage: "bag.fill")
@@ -50,7 +59,7 @@ struct ContentView: View {
                         .buttonStyle(PawnButtonStyle())
 
                         NavigationLink {
-                            CheckoutScreen(cartItems: items)
+                            CheckoutScreen()
                         } label: {
                             Label("Checkout", systemImage: "cart.fill")
                                 .foregroundStyle(.black)
@@ -77,8 +86,25 @@ struct ContentView: View {
             .navigationTitle("LEV Pawn Shop")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Image(systemName: "crown.fill")
-                        .foregroundStyle(PawnTheme.gold)
+                    NavigationLink {
+                        CheckoutScreen()
+                    } label: {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "cart.fill")
+                                .font(.title3)
+                                .foregroundStyle(PawnTheme.gold)
+
+                            if cartItems.count > 0 {
+                                Text("\(cartItems.count)")
+                                    .font(.caption2)
+                                    .padding(4)
+                                    .background(Color.red)
+                                    .foregroundStyle(.white)
+                                    .clipShape(Circle())
+                                    .offset(x: 8, y: -8)
+                            }
+                        }
+                    }
                 }
             }
         }

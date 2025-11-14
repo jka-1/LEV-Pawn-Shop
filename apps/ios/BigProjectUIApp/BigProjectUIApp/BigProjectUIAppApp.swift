@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct BigProjectUIApp: App {
@@ -14,5 +15,6 @@ struct BigProjectUIApp: App {
             ContentView()
                 .preferredColorScheme(.dark)
         }
+        .modelContainer(for: Item.self)
     }
 }

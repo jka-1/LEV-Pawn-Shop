@@ -2,25 +2,43 @@
 //  Item.swift
 //  Apple Wallet
 //
-//  Created by user288203 on 10/29/25.
+//  Created by Matthew Pearaylall on 11/14/25.
 //
 
 import Foundation
 import SwiftData
 
 @Model
-final class Item: Identifiable {
-    @Attribute(.unique) var id: UUID
+class Item: Identifiable {
+    var id: UUID
     var name: String
     var price: Decimal
+    var details: String
+    var category: String
+    var condition: String
     var imageData: Data?
-    var timestamp: Date
+    var isInCart: Bool
+    var createdAt: Date
 
-    init(name: String, price: Decimal, imageData: Data? = nil, timestamp: Date = Date()) {
-        self.id = UUID()
+    init(
+        id: UUID = UUID(),
+        name: String,
+        price: Decimal,
+        details: String = "",
+        category: String = "General",
+        condition: String = "Good",
+        imageData: Data? = nil,
+        isInCart: Bool = false,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
         self.name = name
         self.price = price
+        self.details = details
+        self.category = category
+        self.condition = condition
         self.imageData = imageData
-        self.timestamp = timestamp
+        self.isInCart = isInCart
+        self.createdAt = createdAt
     }
 }

@@ -1,7 +1,9 @@
 import SwiftUI
+import SwiftData
 
 struct CheckoutScreen: View {
-    var cartItems: [Item]
+    @Environment(\.modelContext) private var context
+    @Query(filter: #Predicate<Item> { $0.isInCart == true }) var cartItems: [Item]
 
     @State private var paymentSuccess = false
 
@@ -18,18 +20,32 @@ struct CheckoutScreen: View {
                     .font(.largeTitle).bold()
                     .foregroundStyle(.white)
 
-                List(cartItems) { item in
-                    HStack {
-                        Text(item.name)
-                            .foregroundStyle(.white)
-                        Spacer()
-                        Text("\(item.price as NSDecimalNumber, formatter: currencyFormatter)")
-                            .foregroundStyle(PawnTheme.gold)
+                if cartItems.isEmpty {
+                    Text("Your cart is empty.")
+                        .foregroundStyle(.white.opacity(0.7))
+                } else {
+                    List {
+                        ForEach(cartItems) { item in
+                            HStack {
+                                Text(item.name)
+                                    .foregroundStyle(.white)
+                                Spacer()
+                                Text("\(item.price as NSDecimalNumber, formatter: currencyFormatter)")
+                                    .foregroundStyle(PawnTheme.gold)
+
+                                Button {
+                                    item.isInCart = false
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(.red)
+                                }
+                            }
+                            .listRowBackground(Color.black.opacity(0.7))
+                        }
                     }
-                    .listRowBackground(Color.black.opacity(0.7))
+                    .frame(height: 250)
+                    .scrollContentBackground(.hidden)
                 }
-                .frame(height: 250)
-                .scrollContentBackground(.hidden)
 
                 Text("Total: \(totalPrice as NSDecimalNumber, formatter: currencyFormatter)")
                     .font(.title2).bold()
@@ -44,6 +60,7 @@ struct CheckoutScreen: View {
                     }
                 }
                 .frame(width: 220, height: 50)
+                .disabled(cartItems.isEmpty)
 
                 Spacer()
             }
