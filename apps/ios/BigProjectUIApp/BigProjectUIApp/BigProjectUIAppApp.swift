@@ -6,12 +6,15 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
-struct BigProjectUIAppApp: App {
+struct BigProjectUIApp: App {
     var body: some Scene {
         WindowGroup {
-            MainScreen()
+            ContentView()
+                .preferredColorScheme(.dark)
         }
+        .modelContainer(for: Item.self)
     }
 }

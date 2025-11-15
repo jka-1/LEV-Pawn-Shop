@@ -1,78 +1,112 @@
 import SwiftUI
-import UIKit
+import SwiftData
 
 struct ContentView: View {
+
+        @Query(sort: \Item.dateAdded, order: .reverse) var items: [Item]
+        @Query(filter: #Predicate<Item> { $0.isInCart == true }) var cartItems: [Item]
+
     var body: some View {
-        NavigationView {
-            VStack(spacing: 40) {
-                Spacer()
-                Text("Your Inventory")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+        NavigationStack {
+            ZStack {
+                PawnTheme.background.ignoresSafeArea()
 
-                NavigationLink(destination: AddItemView()) {
-                    Text("Add Item")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding()
-                        .frame(width: 200, height: 50)
-                        .background(Color.black)
-                        .cornerRadius(12)
+                ScrollView {
+                    VStack(spacing: 24) {
+
+                        BrandHeader()
+
+                        Text("High-end trading that actually moves items in real life.")
+                            .multilineTextAlignment(.center)
+                            .font(.title3.weight(.medium))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .padding(.horizontal)
+
+                        FeaturesCard()
+
+                        // MARK: Navigation Actions
+
+                        NavigationLink {
+                            AddItemView()
+                        } label: {
+                            Label("Add Item", systemImage: "plus.circle.fill")
+                                .foregroundStyle(.black)
+                        }
+                        .buttonStyle(PawnButtonStyle())
+
+                        NavigationLink {
+                            InventoryView()
+                        } label: {
+                            Label("My Items", systemImage: "square.grid.2x2.fill")
+                                .foregroundStyle(.black)
+                        }
+                        .buttonStyle(PawnButtonStyle())
+
+                        NavigationLink {
+                            BrowseScreen()
+                        } label: {
+                            Label("Browse the Shop", systemImage: "bag.fill")
+                                .foregroundStyle(.black)
+                        }
+                        .buttonStyle(PawnButtonStyle())
+
+                        NavigationLink {
+                            MeetupScreen()
+                        } label: {
+                            Label("Find Meetup Location", systemImage: "map.fill")
+                                .foregroundStyle(.black)
+                        }
+                        .buttonStyle(PawnButtonStyle())
+
+                        NavigationLink {
+                            CheckoutScreen()
+                        } label: {
+                            Label("Checkout", systemImage: "cart.fill")
+                                .foregroundStyle(.black)
+                        }
+                        .buttonStyle(PawnButtonStyle())
+
+                        NavigationLink {
+                            ApplePayDemoScreen()
+                        } label: {
+                            Label("Apple Pay Demo", systemImage: "wallet.pass.fill")
+                                .foregroundStyle(.black)
+                        }
+                        .buttonStyle(PawnButtonStyle(fill: PawnTheme.gold.opacity(0.7)))
+
+                        Text("Secure flows with Apple Pay. Local runners handle pickup, validation, and delivery.")
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.6))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .padding(20)
                 }
+            }
+            .navigationTitle("LEV Pawn Shop")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        CheckoutScreen()
+                    } label: {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "cart.fill")
+                                .font(.title3)
+                                .foregroundStyle(PawnTheme.gold)
 
-                // move this later
-                NavigationLink(destination: MeetupScreen()) {
-                    Text("Find Meetup Location")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding()
-                        .frame(width: 200, height: 50)
-                        .background(Color.black)
-                        .cornerRadius(12)
+                            if cartItems.count > 0 {
+                                Text("\(cartItems.count)")
+                                    .font(.caption2)
+                                    .padding(4)
+                                    .background(Color.red)
+                                    .foregroundStyle(.white)
+                                    .clipShape(Circle())
+                                    .offset(x: 8, y: -8)
+                            }
+                        }
+                    }
                 }
-
-                Spacer()
             }
-            .navigationTitle("Welcome")
         }
-    }
-}
-
-
-struct ImagePicker: UIViewControllerRepresentable {
-    @Binding var image: UIImage?
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.delegate = context.coordinator
-        return picker
-    }
-    
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-    
-    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
-        var parent: ImagePicker
-        
-        init(_ parent: ImagePicker) {
-            self.parent = parent
-        }
-        
-        func imagePickerController(_ picker: UIImagePickerController,
-                                   didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            if let uiImage = info[.originalImage] as? UIImage {
-                parent.image = uiImage
-            }
-            picker.dismiss(animated: true)
-        }
-        
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            picker.dismiss(animated: true)
-        }
-        
     }
 }
