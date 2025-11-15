@@ -25,13 +25,25 @@ export default function UploadPage() {
   const errorRef = React.useRef<HTMLDivElement | null>(null);
   const [aiLoading, setAiLoading] = React.useState(false);
   const [aiNote, setAiNote] = React.useState<string | null>(null);
+  const [localFile, setLocalFile] = React.useState<File | null>(null);
+  const controllerRef = React.useRef<AbortController | null>(null);
 
   async function handleFileSelect(file: File) {
     setError(null); setOk(null);
     try {
+      setLocalFile(file);
       const sigResp = await fetch("/api/uploads/sign", { method: "POST", credentials: "include" });
       const sig = await sigResp.json().catch(() => ({}));
-      if (!sigResp.ok || !sig?.ok) throw new Error(sig?.error || "Failed to get upload signature");
+      if (!sigResp.ok || !sig?.ok) {
+        const fdLocal = new FormData();
+        fdLocal.append('file', file);
+        const upLocal = await fetch('/api/uploads/local', { method: 'POST', body: fdLocal });
+        const jl = await upLocal.json().catch(() => ({}));
+        if (!upLocal.ok || !jl?.ok) throw new Error(jl?.error || "Upload failed");
+        setDraft((d) => ({ ...d, imageUrl: jl.url || "" }));
+        setOk("Image uploaded.");
+        return;
+      }
 
       const fd = new FormData();
       fd.append("file", file);
@@ -50,6 +62,19 @@ export default function UploadPage() {
       setError(e?.message || "Upload failed");
       setTimeout(() => errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
     }
+  }
+
+  async function fileToBase64(f: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const res = String(reader.result || '');
+        const base64 = res.includes(',') ? res.split(',')[1] : res;
+        resolve(base64);
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(f);
+    });
   }
 
   const onSubmit: React.FormEventHandler = async (e) => {
@@ -93,10 +118,12 @@ export default function UploadPage() {
   async function estimateWithAI() {
     setError(null); setOk(null); setAiNote(null);
     if (!draft.name.trim()) return setError("Please enter a name before estimating.");
-    if (!draft.imageUrl.trim() && !draft.description.trim()) return setError("Provide an image or description for a better estimate.");
+    if (!localFile && !draft.imageUrl.trim() && !draft.description.trim()) return setError("Provide an image or description for a better estimate.");
 
     setAiLoading(true);
     try {
+      controllerRef.current?.abort();
+      controllerRef.current = new AbortController();
       let location: any = null;
       try {
         location = await new Promise((resolve) => {
@@ -109,17 +136,35 @@ export default function UploadPage() {
         });
       } catch {}
 
-      const resp = await fetch('/api/estimate-price', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: draft.name.trim(),
-          description: draft.description.trim(),
-          imageUrl: draft.imageUrl.trim() || undefined,
-          location
-        })
-      });
+      let resp: Response;
+      if (localFile) {
+        const data = await fileToBase64(localFile);
+        resp = await fetch('/api/estimate-price', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          signal: controllerRef.current.signal,
+          body: JSON.stringify({
+            name: draft.name.trim(),
+            description: draft.description.trim(),
+            imageBase64: { mimeType: localFile.type || 'image/jpeg', data },
+            location
+          })
+        });
+      } else {
+        resp = await fetch('/api/estimate-price', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          signal: controllerRef.current.signal,
+          body: JSON.stringify({
+            name: draft.name.trim(),
+            description: draft.description.trim(),
+            imageUrl: draft.imageUrl.trim() || undefined,
+            location
+          })
+        });
+      }
       const data = await resp.json();
       if (!resp.ok || !data?.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
 
@@ -131,11 +176,20 @@ export default function UploadPage() {
       const conf = typeof data.confidence === 'number' ? `Confidence: ${(data.confidence * 100).toFixed(0)}%` : '';
       setAiNote([`AI suggests $${priceNum.toFixed(0)} USD`, range, conf].filter(Boolean).join(' · '));
     } catch (e: any) {
-      setError(e?.message || 'AI estimate failed.');
+      if (e?.name === 'AbortError') {
+        setError('Estimation canceled.');
+      } else {
+        setError(e?.message || 'AI estimate failed.');
+      }
       setTimeout(() => errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
     } finally {
       setAiLoading(false);
     }
+  }
+
+  function cancelEstimate() {
+    controllerRef.current?.abort();
+    setAiLoading(false);
   }
 
   return (
@@ -177,6 +231,11 @@ export default function UploadPage() {
                   <button type="button" className="btn btn--gold" onClick={estimateWithAI} disabled={aiLoading} aria-disabled={aiLoading}>
                     {aiLoading ? 'Estimating…' : 'Estimate with AI'}
                   </button>
+                  {aiLoading && (
+                    <button type="button" className="btn btn--gold" onClick={cancelEstimate}>
+                      Stop
+                    </button>
+                  )}
                   {aiNote && <small style={{ color: '#a9b5cb' }}>{aiNote}</small>}
                 </div>
               </div>

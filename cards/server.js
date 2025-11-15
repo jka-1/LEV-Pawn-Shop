@@ -9,8 +9,12 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { Resend } = require('resend');
 const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
 // Optional: built-in fetch is available on Node 18+. If not, add node-fetch.
 const hasFetch = typeof fetch === 'function';
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 console.log('Resend configured:', !!process.env.RESEND_API_KEY);
@@ -47,6 +51,7 @@ const REQUIRE_EMAIL_VERIFICATION = (process.env.REQUIRE_EMAIL_VERIFICATION ?? 't
 app.use(cors({ origin: APP_BASE_URL, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ----- DB CONNECT (once) -----
 let db, Users, Urls, EmailTokens;
@@ -117,8 +122,22 @@ async function fetchImageAsBase64(url) {
     if (!resp || !resp.ok) return null;
     const buf = await resp.arrayBuffer();
     const b = Buffer.from(buf);
-    // naive mime inference (improve if needed)
-    const mime = url.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+    const u = url.toLowerCase();
+    const mime = u.endsWith('.png')
+      ? 'image/png'
+      : u.endsWith('.jpg') || u.endsWith('.jpeg')
+      ? 'image/jpeg'
+      : u.endsWith('.webp')
+      ? 'image/webp'
+      : u.endsWith('.gif')
+      ? 'image/gif'
+      : u.endsWith('.bmp')
+      ? 'image/bmp'
+      : u.endsWith('.heic')
+      ? 'image/heic'
+      : u.endsWith('.heif')
+      ? 'image/heif'
+      : 'image/jpeg';
     return { mimeType: mime, data: b.toString('base64') };
   } catch {
     return null;
@@ -197,21 +216,54 @@ async function estimatePriceWithGemini({ name, description, imageUrl, imageBase6
   return parsed;
 }
 
-app.post('/api/estimate-price', async (req, res) => {
+app.post('/api/estimate-price', upload.single('file'), async (req, res) => {
   try {
     const apiKeyPresent = !!(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
     if (!apiKeyPresent) {
       return res.status(503).json({ error: 'ai_not_configured', message: 'Gemini API key not set' });
     }
-    const { name, description, imageUrl, imageBase64, location } = req.body || {};
-    if (!name && !description && !imageUrl && !imageBase64) {
+    let { name, description, imageUrl, imageBase64, location } = req.body || {};
+    if (typeof location === 'string') {
+      try { location = JSON.parse(location); } catch {}
+    }
+    let filePart = null;
+    if (req.file && req.file.buffer && req.file.mimetype) {
+      filePart = { mimeType: req.file.mimetype, data: req.file.buffer.toString('base64') };
+    }
+    if (!name && !description && !imageUrl && !imageBase64 && !filePart) {
       return res.status(400).json({ error: 'Missing item data' });
     }
-    const result = await estimatePriceWithGemini({ name, description, imageUrl, imageBase64, location });
+    const result = await estimatePriceWithGemini({ name, description, imageUrl, imageBase64: imageBase64 || filePart, location });
     return res.status(200).json({ ok: true, ...result });
   } catch (e) {
     console.error('estimate-price error:', e);
     return res.status(500).json({ error: e?.message || 'server_error' });
+  }
+});
+
+app.post('/api/uploads/local', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) return res.status(400).json({ ok: false, error: 'NoFile' });
+    const dir = path.join(__dirname, 'uploads');
+    await fs.promises.mkdir(dir, { recursive: true });
+    const map = {
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp',
+      'image/gif': '.gif',
+      'image/bmp': '.bmp',
+      'image/heic': '.heic',
+      'image/heif': '.heif'
+    };
+    const ext = map[req.file.mimetype] || '.bin';
+    const name = `${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
+    const fp = path.join(dir, name);
+    await fs.promises.writeFile(fp, req.file.buffer);
+    const base = process.env.API_BASE_URL || `http://localhost:${PORT}`;
+    const url = `${base}/uploads/${name}`;
+    return res.status(200).json({ ok: true, url });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: 'upload_error' });
   }
 });
 
