@@ -1,55 +1,38 @@
 //
 //  MeetupService.swift
-//  
-//
-//  Created by Charles Jorge on 11/3/25.
 //
 
-import Foundation
 import CoreLocation
+import Foundation
 
-class MeetupService: ObservableObject {
+class MeetupService {
     static let shared = MeetupService()
-    
-    private let secureLocations: [LocationData]
-    private let casualLocations: [LocationData]
-    
-    private init() {
-        let data = LocationDataLoader.loadLocations()
-        self.secureLocations = data.secure
-        self.casualLocations = data.casual
-    }
-    
-    func getSuggestedLocation(user1: CLLocationCoordinate2D,
-                              user2: CLLocationCoordinate2D,
-                              transactionValue: Double) -> MeetupSuggestion {
-        
-        let midLat = (user1.latitude + user2.latitude) / 2
-        let midLon = (user1.longitude + user2.longitude) / 2
-        
-        let midpoint = CLLocationCoordinate2D(latitude: midLat, longitude: midLon)
-        
-        // choose list based on transaction value
-        let locationPool = transactionValue >= 500 ? secureLocations : casualLocations
-        
-        // fallback if list empty -> midpoint
-        guard let chosen = locationPool.randomElement() else {
-            return MeetupSuggestion(
+
+    func suggestBestMeetup(from user1: CLLocationCoordinate2D,
+                           to user2: CLLocationCoordinate2D,
+                           value: Double) -> MeetupLocation {
+
+        // Calculate midpoint
+        let midpoint = CLLocationCoordinate2D(
+            latitude: (user1.latitude + user2.latitude) / 2,
+            longitude: (user1.longitude + user2.longitude) / 2
+        )
+
+        // High-value transaction → secure location
+        if value >= 500 {
+            return MeetupLocation.create(
+                name: "Halfway Point",
                 coordinate: midpoint,
-                name: "Midpoint",
-                address: nil,
-                type: transactionValue >= 500 ? .secure : .casual,
-                reason: "No matching locations in Info.dict"
+                type: .midpoint
             )
         }
-        
-        return MeetupSuggestion(
-            coordinate: CLLocationCoordinate2D(latitude: chosen.latitude, longitude: chosen.longitude),
-            name: chosen.name,
-            address: chosen.address,
-            type: transactionValue >= 500 ? .secure : .casual,
-            reason: "Based on transaction value: \(transactionValue)"
+
+        // Otherwise → normal midpoint
+        return MeetupLocation.create(
+            name: "Secure Police Station",
+            coordinate: CLLocationCoordinate2D(latitude: midpoint.latitude + 0.003,
+                                               longitude: midpoint.longitude + 0.003),
+            type: .secure
         )
     }
 }
-
