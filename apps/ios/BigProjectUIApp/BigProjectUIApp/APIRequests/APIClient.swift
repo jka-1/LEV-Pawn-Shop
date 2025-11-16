@@ -1,7 +1,7 @@
 //
 //  APIClient.swift
 //
-//  Simple client for POST /api/storefront and auth endpoints on https://bibe.stream
+//  Simple client for POST /api/storefront, auth endpoints, and /api/estimate-price on https://bibe.stream
 //
 
 import Foundation
@@ -74,6 +74,53 @@ struct AuthUser: Decodable {
     let login: String
     let firstName: String
     let lastName: String
+}
+
+// MARK: - Gemini Price Estimate Models
+
+/// Optional location payload, mirrors the `location` object the server expects.
+struct EstimateLocationPayload: Encodable {
+    let city: String?
+    let state: String?
+    let country: String?
+    let lat: Double?
+    let lng: Double?
+}
+
+/// Optional base64 image payload, matches `imageBase64` on the server.
+struct EstimateImageBase64Payload: Encodable {
+    let mimeType: String?
+    let data: String
+}
+
+/// Request body for POST /api/estimate-price
+struct EstimatePricePayload: Encodable {
+    let name: String?
+    let description: String?
+    let imageUrl: String?
+    let imageBase64: EstimateImageBase64Payload?
+    let location: EstimateLocationPayload?
+}
+
+/// Comparable listing returned from Gemini
+struct PriceComparable: Decodable {
+    let title: String
+    let source: String
+    let link: String
+    let price: Double
+}
+
+/// Successful response from POST /api/estimate-price
+/// Server shape: { ok: true, price, low, high, currency, confidence, explanation, comparables? }
+struct EstimatePriceResponse: Decodable {
+    let ok: Bool
+    let price: Double
+    let low: Double
+    let high: Double
+    let currency: String
+    let confidence: Double
+    let explanation: String
+    let comparables: [PriceComparable]?
 }
 
 enum StorefrontAPIError: Error {
@@ -434,6 +481,149 @@ final class StorefrontAPI {
         let user = try JSONDecoder().decode(AuthUser.self, from: data)
         return user
     }
+
+    // MARK: - Public API (Gemini price estimate - completion handler)
+
+    /// Call the /api/estimate-price endpoint to get a cash offer + listing range.
+    ///
+    /// - Parameters:
+    ///   - name: Optional item name.
+    ///   - description: Optional item description.
+    ///   - imageUrl: Optional public image URL.
+    ///   - imageData: Optional raw image data; if provided it will be base64-encoded
+    ///                and sent as `imageBase64.data`.
+    ///   - imageMimeType: Optional MIME type for `imageData` (e.g. "image/jpeg").
+    ///   - location: Optional location payload; pass `nil` to omit.
+    func estimatePrice(
+        name: String? = nil,
+        description: String? = nil,
+        imageUrl: String? = nil,
+        imageData: Data? = nil,
+        imageMimeType: String? = nil,
+        location: EstimateLocationPayload? = nil,
+        completion: @escaping (Result<EstimatePriceResponse, Error>) -> Void
+    ) {
+        guard let url = URL(string: "/api/estimate-price", relativeTo: baseURL) else {
+            completion(.failure(StorefrontAPIError.invalidURL))
+            return
+        }
+
+        let imageBase64: EstimateImageBase64Payload?
+        if let data = imageData {
+            imageBase64 = EstimateImageBase64Payload(
+                mimeType: imageMimeType,
+                data: data.base64EncodedString()
+            )
+        } else {
+            imageBase64 = nil
+        }
+
+        let payload = EstimatePricePayload(
+            name: name,
+            description: description,
+            imageUrl: imageUrl,
+            imageBase64: imageBase64,
+            location: location
+        )
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // If you lock this endpoint down with requireAuthOrIos later,
+        // this header will already be in place.
+        request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
+
+        do {
+            let body = try JSONEncoder().encode(payload)
+            request.httpBody = body
+        } catch {
+            completion(.failure(StorefrontAPIError.underlying(error)))
+            return
+        }
+
+        urlSession.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(StorefrontAPIError.underlying(error)))
+                return
+            }
+
+            guard let http = response as? HTTPURLResponse else {
+                completion(.failure(StorefrontAPIError.httpStatus(-1)))
+                return
+            }
+
+            guard (200..<300).contains(http.statusCode) else {
+                completion(.failure(StorefrontAPIError.httpStatus(http.statusCode)))
+                return
+            }
+
+            guard let data = data else {
+                completion(.failure(StorefrontAPIError.decodingFailed))
+                return
+            }
+
+            do {
+                let decoded = try JSONDecoder().decode(EstimatePriceResponse.self, from: data)
+                completion(.success(decoded))
+            } catch {
+                completion(.failure(StorefrontAPIError.decodingFailed))
+            }
+        }.resume()
+    }
+
+    // MARK: - Public API (Gemini price estimate - async/await)
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func estimatePrice(
+        name: String? = nil,
+        description: String? = nil,
+        imageUrl: String? = nil,
+        imageData: Data? = nil,
+        imageMimeType: String? = nil,
+        location: EstimateLocationPayload? = nil
+    ) async throws -> EstimatePriceResponse {
+        guard let url = URL(string: "/api/estimate-price", relativeTo: baseURL) else {
+            throw StorefrontAPIError.invalidURL
+        }
+
+        let imageBase64: EstimateImageBase64Payload?
+        if let data = imageData {
+            imageBase64 = EstimateImageBase64Payload(
+                mimeType: imageMimeType,
+                data: data.base64EncodedString()
+            )
+        } else {
+            imageBase64 = nil
+        }
+
+        let payload = EstimatePricePayload(
+            name: name,
+            description: description,
+            imageUrl: imageUrl,
+            imageBase64: imageBase64,
+            location: location
+        )
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
+        request.httpBody = try JSONEncoder().encode(payload)
+
+        let (data, response) = try await urlSession.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw StorefrontAPIError.httpStatus(-1)
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            throw StorefrontAPIError.httpStatus(http.statusCode)
+        }
+
+        let decoded = try JSONDecoder().decode(EstimatePriceResponse.self, from: data)
+        return decoded
+    }
 }
 
 // MARK: - Example usage (you can delete this in production)
@@ -490,6 +680,24 @@ func exampleLoginWithCompletion() {
     }
 }
 
+// Completion-based price estimate
+func exampleEstimatePriceWithCompletion() {
+    StorefrontAPI.shared.estimatePrice(
+        name: "MacBook Pro 14\" 2023",
+        description: "M2 Pro, 16GB RAM, 512GB SSD, good condition",
+        imageUrl: "https://example.com/macbook.jpg"
+    ) { result in
+        switch result {
+        case .success(let response):
+            print("Cash offer:", response.price,
+                  "range:", response.low, "-", response.high,
+                  "confidence:", response.confidence)
+        case .failure(let error):
+            print("Estimate failed:", error)
+        }
+    }
+}
+
 // Async/await (in an async context)
 /*
 @available(iOS 15.0, *)
@@ -533,6 +741,22 @@ func exampleLoginAsync() async {
         print("Logged in as:", user.username)
     } catch {
         print("Login failed:", error)
+    }
+}
+
+@available(iOS 15.0, *)
+func exampleEstimatePriceAsync() async {
+    do {
+        let estimate = try await StorefrontAPI.shared.estimatePrice(
+            name: "PlayStation 5",
+            description: "Disc edition, 2 controllers, great condition",
+            imageUrl: "https://example.com/ps5.jpg"
+        )
+        print("Cash offer:", estimate.price,
+              "range:", estimate.low, "-", estimate.high,
+              "confidence:", estimate.confidence)
+    } catch {
+        print("Estimate failed:", error)
     }
 }
 */
