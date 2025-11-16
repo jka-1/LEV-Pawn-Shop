@@ -10,9 +10,13 @@ import SwiftData
 
 @main
 struct BigProjectUIApp: App {
+
+    @StateObject var session = SessionManager.shared
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
+                .environmentObject(session)
                 .preferredColorScheme(.dark)
         }
         .modelContainer(for: Item.self)
