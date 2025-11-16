@@ -76,6 +76,36 @@ struct AuthUser: Decodable {
     let lastName: String
 }
 
+// MARK: - Email verification & password reset models
+
+/// Request body for POST /api/resend-verification
+struct ResendVerificationPayload: Encodable {
+    let email: String
+}
+
+/// Response from /api/resend-verification
+/// Example: { "ok": true } or { "ok": true, "message": "AlreadyVerified" }
+struct ResendVerificationResponse: Decodable {
+    let ok: Bool
+    let message: String?
+}
+
+/// Request body for POST /api/forgot-password
+struct ForgotPasswordPayload: Encodable {
+    let email: String
+}
+
+/// Simple `{ ok: true }` style response
+struct SimpleOKResponse: Decodable {
+    let ok: Bool
+}
+
+/// Request body for POST /api/reset-password
+struct ResetPasswordPayload: Encodable {
+    let token: String
+    let password: String
+}
+
 // MARK: - Gemini Price Estimate Models
 
 /// Optional location payload, mirrors the `location` object the server expects.
@@ -482,6 +512,297 @@ final class StorefrontAPI {
         return user
     }
 
+    // MARK: - Public API (Auth - email verification & password reset, completion handler)
+
+    /// Resend verification email to a user.
+    /// Mirrors POST /api/resend-verification
+    func resendVerification(
+        email: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        guard let url = URL(string: "/api/resend-verification", relativeTo: baseURL) else {
+            completion(.failure(StorefrontAPIError.invalidURL))
+            return
+        }
+
+        let payload = ResendVerificationPayload(email: email)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do {
+            request.httpBody = try JSONEncoder().encode(payload)
+        } catch {
+            completion(.failure(StorefrontAPIError.underlying(error)))
+            return
+        }
+
+        urlSession.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(StorefrontAPIError.underlying(error)))
+                return
+            }
+
+            guard let http = response as? HTTPURLResponse else {
+                completion(.failure(StorefrontAPIError.httpStatus(-1)))
+                return
+            }
+
+            guard (200..<300).contains(http.statusCode) else {
+                completion(.failure(StorefrontAPIError.httpStatus(http.statusCode)))
+                return
+            }
+
+            // If server ever changes to 204 or empty body, treat as success.
+            guard let data = data, !data.isEmpty else {
+                completion(.success(()))
+                return
+            }
+
+            do {
+                let decoded = try JSONDecoder().decode(ResendVerificationResponse.self, from: data)
+                if decoded.ok {
+                    completion(.success(()))
+                } else {
+                    completion(.failure(
+                        StorefrontAPIError.serverError(
+                            message: decoded.message ?? "Verification resend failed"
+                        )
+                    ))
+                }
+            } catch {
+                completion(.failure(StorefrontAPIError.decodingFailed))
+            }
+        }.resume()
+    }
+
+    /// Start password reset flow (sends email if the account exists).
+    /// Mirrors POST /api/forgot-password
+    func forgotPassword(
+        email: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        guard let url = URL(string: "/api/forgot-password", relativeTo: baseURL) else {
+            completion(.failure(StorefrontAPIError.invalidURL))
+            return
+        }
+
+        let payload = ForgotPasswordPayload(email: email)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do {
+            request.httpBody = try JSONEncoder().encode(payload)
+        } catch {
+            completion(.failure(StorefrontAPIError.underlying(error)))
+            return
+        }
+
+        urlSession.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(StorefrontAPIError.underlying(error)))
+                return
+            }
+
+            guard let http = response as? HTTPURLResponse else {
+                completion(.failure(StorefrontAPIError.httpStatus(-1)))
+                return
+            }
+
+            guard (200..<300).contains(http.statusCode) else {
+                completion(.failure(StorefrontAPIError.httpStatus(http.statusCode)))
+                return
+            }
+
+            // This endpoint always returns 200 with an { ok: true } body in your server,
+            // but treat empty as success too.
+            guard let data = data, !data.isEmpty else {
+                completion(.success(()))
+                return
+            }
+
+            do {
+                let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
+                if decoded.ok {
+                    completion(.success(()))
+                } else {
+                    completion(.failure(
+                        StorefrontAPIError.serverError(message: "Forgot password failed")
+                    ))
+                }
+            } catch {
+                completion(.failure(StorefrontAPIError.decodingFailed))
+            }
+        }.resume()
+    }
+
+    /// Complete password reset with a token from the email.
+    /// Mirrors POST /api/reset-password
+    func resetPassword(
+        token: String,
+        newPassword: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        guard let url = URL(string: "/api/reset-password", relativeTo: baseURL) else {
+            completion(.failure(StorefrontAPIError.invalidURL))
+            return
+        }
+
+        let payload = ResetPasswordPayload(token: token, password: newPassword)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do {
+            request.httpBody = try JSONEncoder().encode(payload)
+        } catch {
+            completion(.failure(StorefrontAPIError.underlying(error)))
+            return
+        }
+
+        urlSession.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(StorefrontAPIError.underlying(error)))
+                return
+            }
+
+            guard let http = response as? HTTPURLResponse else {
+                completion(.failure(StorefrontAPIError.httpStatus(-1)))
+                return
+            }
+
+            guard (200..<300).contains(http.statusCode) else {
+                completion(.failure(StorefrontAPIError.httpStatus(http.statusCode)))
+                return
+            }
+
+            guard let data = data, !data.isEmpty else {
+                completion(.success(()))
+                return
+            }
+
+            do {
+                let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
+                if decoded.ok {
+                    completion(.success(()))
+                } else {
+                    completion(.failure(
+                        StorefrontAPIError.serverError(message: "Reset password failed")
+                    ))
+                }
+            } catch {
+                completion(.failure(StorefrontAPIError.decodingFailed))
+            }
+        }.resume()
+    }
+
+    // MARK: - Public API (Auth - email verification & password reset, async/await)
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func resendVerification(email: String) async throws {
+        guard let url = URL(string: "/api/resend-verification", relativeTo: baseURL) else {
+            throw StorefrontAPIError.invalidURL
+        }
+
+        let payload = ResendVerificationPayload(email: email)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(payload)
+
+        let (data, response) = try await urlSession.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw StorefrontAPIError.httpStatus(-1)
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            throw StorefrontAPIError.httpStatus(http.statusCode)
+        }
+
+        if data.isEmpty {
+            return
+        }
+
+        let decoded = try JSONDecoder().decode(ResendVerificationResponse.self, from: data)
+        guard decoded.ok else {
+            throw StorefrontAPIError.serverError(
+                message: decoded.message ?? "Verification resend failed"
+            )
+        }
+    }
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func forgotPassword(email: String) async throws {
+        guard let url = URL(string: "/api/forgot-password", relativeTo: baseURL) else {
+            throw StorefrontAPIError.invalidURL
+        }
+
+        let payload = ForgotPasswordPayload(email: email)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(payload)
+
+        let (data, response) = try await urlSession.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw StorefrontAPIError.httpStatus(-1)
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            throw StorefrontAPIError.httpStatus(http.statusCode)
+        }
+
+        if data.isEmpty {
+            return
+        }
+
+        let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
+        guard decoded.ok else {
+            throw StorefrontAPIError.serverError(message: "Forgot password failed")
+        }
+    }
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func resetPassword(token: String, newPassword: String) async throws {
+        guard let url = URL(string: "/api/reset-password", relativeTo: baseURL) else {
+            throw StorefrontAPIError.invalidURL
+        }
+
+        let payload = ResetPasswordPayload(token: token, password: newPassword)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(payload)
+
+        let (data, response) = try await urlSession.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw StorefrontAPIError.httpStatus(-1)
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            throw StorefrontAPIError.httpStatus(http.statusCode)
+        }
+
+        if data.isEmpty {
+            return
+        }
+
+        let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
+        guard decoded.ok else {
+            throw StorefrontAPIError.serverError(message: "Reset password failed")
+        }
+    }
+
     // MARK: - Public API (Gemini price estimate - completion handler)
 
     /// Call the /api/estimate-price endpoint to get a cash offer + listing range.
@@ -698,6 +1019,42 @@ func exampleEstimatePriceWithCompletion() {
     }
 }
 
+// Completion-based forgot password
+func exampleForgotPasswordWithCompletion() {
+    StorefrontAPI.shared.forgotPassword(email: "test@example.com") { result in
+        switch result {
+        case .success:
+            print("Forgot password email sent (if account exists).")
+        case .failure(let error):
+            print("Forgot password failed:", error)
+        }
+    }
+}
+
+// Completion-based resend verification
+func exampleResendVerificationWithCompletion() {
+    StorefrontAPI.shared.resendVerification(email: "test@example.com") { result in
+        switch result {
+        case .success:
+            print("Verification email re-sent.")
+        case .failure(let error):
+            print("Resend verification failed:", error)
+        }
+    }
+}
+
+// Completion-based reset password
+func exampleResetPasswordWithCompletion(token: String, newPassword: String) {
+    StorefrontAPI.shared.resetPassword(token: token, newPassword: newPassword) { result in
+        switch result {
+        case .success:
+            print("Password reset OK")
+        case .failure(let error):
+            print("Reset password failed:", error)
+        }
+    }
+}
+
 // Async/await (in an async context)
 /*
 @available(iOS 15.0, *)
@@ -757,6 +1114,36 @@ func exampleEstimatePriceAsync() async {
               "confidence:", estimate.confidence)
     } catch {
         print("Estimate failed:", error)
+    }
+}
+
+@available(iOS 15.0, *)
+func exampleForgotPasswordAsync() async {
+    do {
+        try await StorefrontAPI.shared.forgotPassword(email: "async@example.com")
+        print("Forgot password email sent (if account exists).")
+    } catch {
+        print("Forgot password failed:", error)
+    }
+}
+
+@available(iOS 15.0, *)
+func exampleResendVerificationAsync() async {
+    do {
+        try await StorefrontAPI.shared.resendVerification(email: "async@example.com")
+        print("Verification email re-sent.")
+    } catch {
+        print("Resend verification failed:", error)
+    }
+}
+
+@available(iOS 15.0, *)
+func exampleResetPasswordAsync(token: String, newPassword: String) async {
+    do {
+        try await StorefrontAPI.shared.resetPassword(token: token, newPassword: newPassword)
+        print("Password reset OK")
+    } catch {
+        print("Reset password failed:", error)
     }
 }
 */
