@@ -1,13 +1,13 @@
-
 //
 //  APIClient.swift
+//  BigProjectUIApp
 //
-//  Simple client for POST /api/storefront, auth endpoints, and /api/estimate-price on https://bibe.stream
+//  Networking client for auth, storefront, and price estimate APIs.
 //
 
 import Foundation
 
-// MARK: - Request / Response Models
+// MARK: - Storefront create models
 
 struct StorefrontItemPayload: Encodable {
     let name: String
@@ -33,6 +33,52 @@ struct StorefrontCreateResponse: Decodable {
     let error: String?
 }
 
+// MARK: - Storefront listing models
+
+/// Single item used by the Browse screen.
+struct StorefrontListItem: Identifiable, Decodable {
+    let id: String
+    let name: String
+    let price: Double
+    let description: String?
+    let imageUrl: String?
+    let tags: [String]
+    let active: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case _id
+        case name
+        case price
+        case description
+        case imageUrl
+        case tags
+        case active
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        // Server returns `_id` from Mongo; support either `id` or `_id`
+        self.id = try container.decodeIfPresent(String.self, forKey: .id)
+            ?? container.decode(String.self, forKey: ._id)
+
+        self.name = try container.decode(String.self, forKey: .name)
+        self.price = try container.decode(Double.self, forKey: .price)
+        self.description = try container.decodeIfPresent(String.self, forKey: .description)
+        self.imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        self.tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        self.active = try container.decodeIfPresent(Bool.self, forKey: .active) ?? true
+    }
+}
+
+/// Exact shape of GET /api/storefront
+struct StorefrontListResponse: Decodable {
+    let ok: Bool
+    let items: [StorefrontListItem]
+    let nextCursor: String?
+}
+
 // MARK: - Auth Models
 
 /// Request body for POST /api/register
@@ -45,7 +91,6 @@ struct RegisterPayload: Encodable {
 }
 
 /// Response body for POST /api/register
-/// Example: { "message": "Registered", "id": "..." }
 struct RegisterResponse: Decodable {
     let message: String
     let id: String
@@ -58,16 +103,6 @@ struct LoginPayload: Encodable {
 }
 
 /// Successful response body for POST /api/login
-/// Example:
-/// {
-///   "id": "...",
-///   "email": "...",
-///   "username": "...",
-///   "login": "...",
-///   "firstName": "",
-///   "lastName": "",
-///   "error": ""
-/// }
 struct AuthUser: Decodable {
     let id: String
     let email: String
@@ -79,35 +114,28 @@ struct AuthUser: Decodable {
 
 // MARK: - Email verification & password reset models
 
-/// Request body for POST /api/resend-verification
 struct ResendVerificationPayload: Encodable {
     let email: String
 }
 
-/// Response from /api/resend-verification
-/// Example: { "ok": true } or { "ok": true, "message": "AlreadyVerified" }
 struct ResendVerificationResponse: Decodable {
     let ok: Bool
     let message: String?
 }
 
-/// Request body for POST /api/forgot-password
 struct ForgotPasswordPayload: Encodable {
     let email: String
 }
 
-/// Simple `{ ok: true }` style response
 struct SimpleOKResponse: Decodable {
     let ok: Bool
 }
 
-/// Request body for POST /api/reset-password
 struct ResetPasswordPayload: Encodable {
     let token: String
     let password: String
 }
 
-/// Request body for POST /api/verify-email-code
 struct VerifyEmailCodePayload: Encodable {
     let email: String
     let code: String
@@ -115,7 +143,6 @@ struct VerifyEmailCodePayload: Encodable {
 
 // MARK: - Gemini Price Estimate Models
 
-/// Optional location payload, mirrors the `location` object the server expects.
 struct EstimateLocationPayload: Encodable {
     let city: String?
     let state: String?
@@ -124,13 +151,11 @@ struct EstimateLocationPayload: Encodable {
     let lng: Double?
 }
 
-/// Optional base64 image payload, matches `imageBase64` on the server.
 struct EstimateImageBase64Payload: Encodable {
     let mimeType: String?
     let data: String
 }
 
-/// Request body for POST /api/estimate-price
 struct EstimatePricePayload: Encodable {
     let name: String?
     let description: String?
@@ -139,7 +164,6 @@ struct EstimatePricePayload: Encodable {
     let location: EstimateLocationPayload?
 }
 
-/// Comparable listing returned from Gemini
 struct PriceComparable: Decodable {
     let title: String
     let source: String
@@ -147,8 +171,6 @@ struct PriceComparable: Decodable {
     let price: Double
 }
 
-/// Successful response from POST /api/estimate-price
-/// Server shape: { ok: true, price, low, high, currency, confidence, explanation, comparables? }
 struct EstimatePriceResponse: Decodable {
     let ok: Bool
     let price: Double
@@ -159,6 +181,8 @@ struct EstimatePriceResponse: Decodable {
     let explanation: String
     let comparables: [PriceComparable]?
 }
+
+// MARK: - Errors
 
 enum StorefrontAPIError: Error {
     case invalidURL
@@ -179,7 +203,7 @@ final class StorefrontAPI {
     private let baseURL = URL(string: "https://bibe.stream")!
 
     // MUST match process.env.IOS_API_KEY on the server
-    // Otherwise /api/storefront will reject with 401 via requireAuthOrIos.
+    // for /api/storefront POST and other iOS-protected endpoints.
     private let iosAPIKey = "REPLACE_WITH_REAL_IOS_API_KEY"
 
     private let urlSession: URLSession
@@ -188,9 +212,8 @@ final class StorefrontAPI {
         self.urlSession = session
     }
 
-    // MARK: - Public API (Storefront - completion handler)
+    // MARK: - Storefront create (completion)
 
-    /// Create a storefront item using completion handler style.
     func createItem(
         name: String,
         price: Double,
@@ -217,20 +240,16 @@ final class StorefrontAPI {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        // iOS auth path (bypasses cookie-based auth)
         request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
 
         do {
-            let bodyData = try JSONEncoder().encode(payload)
-            request.httpBody = bodyData
+            request.httpBody = try JSONEncoder().encode(payload)
         } catch {
             completion(.failure(StorefrontAPIError.underlying(error)))
             return
         }
 
         urlSession.dataTask(with: request) { data, response, error in
-            // Network / transport error
             if let error = error {
                 completion(.failure(StorefrontAPIError.underlying(error)))
                 return
@@ -253,7 +272,6 @@ final class StorefrontAPI {
 
             do {
                 let decoded = try JSONDecoder().decode(StorefrontCreateResponse.self, from: data)
-
                 if decoded.ok, let id = decoded.id {
                     completion(.success(id))
                 } else if let msg = decoded.error {
@@ -267,9 +285,8 @@ final class StorefrontAPI {
         }.resume()
     }
 
-    // MARK: - Public API (Storefront - async/await)
+    // MARK: - Storefront create (async)
 
-    @available(iOS 15.0, macOS 12.0, *)
     func createItem(
         name: String,
         price: Double,
@@ -295,7 +312,6 @@ final class StorefrontAPI {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
-
         request.httpBody = try JSONEncoder().encode(payload)
 
         let (data, response) = try await urlSession.data(for: request)
@@ -312,18 +328,60 @@ final class StorefrontAPI {
 
         if decoded.ok, let id = decoded.id {
             return id
-        }
-
-        if let msg = decoded.error {
+        } else if let msg = decoded.error {
             throw StorefrontAPIError.serverError(message: msg)
+        } else {
+            throw StorefrontAPIError.missingID
         }
-
-        throw StorefrontAPIError.missingID
     }
 
-    // MARK: - Public API (Auth - register, completion handler)
+    // MARK: - Storefront listing / browse (async, cursor-based)
 
-    /// Register a new user. On success returns the newly created user id.
+    /// Matches server.js:
+    /// GET /api/storefront?limit=24&afterId=<ObjectId>
+    func fetchInventoryPage(
+        afterId: String?,
+        limit: Int
+    ) async throws -> StorefrontListResponse {
+
+        var components = URLComponents()
+        components.scheme = baseURL.scheme
+        components.host = baseURL.host
+        components.path = "/api/storefront"
+
+        var queryItems: [URLQueryItem] = [
+            URLQueryItem(name: "limit", value: String(limit))
+        ]
+        if let afterId = afterId {
+            queryItems.append(URLQueryItem(name: "afterId", value: afterId))
+        }
+        components.queryItems = queryItems
+
+        guard let url = components.url else {
+            throw StorefrontAPIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        // GET is public; header not required:
+        // request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
+
+        let (data, response) = try await urlSession.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw StorefrontAPIError.httpStatus(-1)
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            throw StorefrontAPIError.httpStatus(http.statusCode)
+        }
+
+        let decoded = try JSONDecoder().decode(StorefrontListResponse.self, from: data)
+        return decoded
+    }
+
+    // MARK: - Auth (register)
+
     func register(
         login: String,
         email: String,
@@ -350,8 +408,7 @@ final class StorefrontAPI {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         do {
-            let body = try JSONEncoder().encode(payload)
-            request.httpBody = body
+            request.httpBody = try JSONEncoder().encode(payload)
         } catch {
             completion(.failure(StorefrontAPIError.underlying(error)))
             return
@@ -387,9 +444,6 @@ final class StorefrontAPI {
         }.resume()
     }
 
-    // MARK: - Public API (Auth - register, async/await)
-
-    @available(iOS 15.0, macOS 12.0, *)
     func register(
         login: String,
         email: String,
@@ -428,11 +482,8 @@ final class StorefrontAPI {
         return decoded.id
     }
 
-    // MARK: - Public API (Auth - login, completion handler)
+    // MARK: - Auth (login)
 
-    /// Log in with username or email. On success returns the AuthUser.
-    /// Cookies set by the server (accessToken / refreshToken) are stored
-    /// in the URLSession's shared cookie storage.
     func login(
         loginOrEmail: String,
         password: String,
@@ -450,8 +501,7 @@ final class StorefrontAPI {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         do {
-            let body = try JSONEncoder().encode(payload)
-            request.httpBody = body
+            request.httpBody = try JSONEncoder().encode(payload)
         } catch {
             completion(.failure(StorefrontAPIError.underlying(error)))
             return
@@ -487,9 +537,6 @@ final class StorefrontAPI {
         }.resume()
     }
 
-    // MARK: - Public API (Auth - login, async/await)
-
-    @available(iOS 15.0, macOS 12.0, *)
     func login(
         loginOrEmail: String,
         password: String
@@ -519,10 +566,8 @@ final class StorefrontAPI {
         return user
     }
 
-    // MARK: - Public API (Auth - email verification & password reset, completion handler)
+    // MARK: - Email verification & password reset (completion)
 
-    /// Resend verification email to a user.
-    /// Mirrors POST /api/resend-verification
     func resendVerification(
         email: String,
         completion: @escaping (Result<Void, Error>) -> Void
@@ -561,7 +606,6 @@ final class StorefrontAPI {
                 return
             }
 
-            // If server ever changes to 204 or empty body, treat as success.
             guard let data = data, !data.isEmpty else {
                 completion(.success(()))
                 return
@@ -584,8 +628,6 @@ final class StorefrontAPI {
         }.resume()
     }
 
-    /// Verify email using a 6-digit code instead of the link.
-    /// Mirrors POST /api/verify-email-code
     func verifyEmailCode(
         email: String,
         code: String,
@@ -645,8 +687,6 @@ final class StorefrontAPI {
         }.resume()
     }
 
-    /// Start password reset flow (sends email if the account exists).
-    /// Mirrors POST /api/forgot-password
     func forgotPassword(
         email: String,
         completion: @escaping (Result<Void, Error>) -> Void
@@ -685,8 +725,6 @@ final class StorefrontAPI {
                 return
             }
 
-            // This endpoint always returns 200 with an { ok: true } body in your server,
-            // but treat empty as success too.
             guard let data = data, !data.isEmpty else {
                 completion(.success(()))
                 return
@@ -707,8 +745,6 @@ final class StorefrontAPI {
         }.resume()
     }
 
-    /// Complete password reset with a token from the email.
-    /// Mirrors POST /api/reset-password
     func resetPassword(
         token: String,
         newPassword: String,
@@ -768,9 +804,8 @@ final class StorefrontAPI {
         }.resume()
     }
 
-    // MARK: - Public API (Auth - email verification & password reset, async/await)
+    // MARK: - Email verification & password reset (async)
 
-    @available(iOS 15.0, macOS 12.0, *)
     func resendVerification(email: String) async throws {
         guard let url = URL(string: "/api/resend-verification", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
@@ -793,9 +828,7 @@ final class StorefrontAPI {
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
 
-        if data.isEmpty {
-            return
-        }
+        if data.isEmpty { return }
 
         let decoded = try JSONDecoder().decode(ResendVerificationResponse.self, from: data)
         guard decoded.ok else {
@@ -805,7 +838,6 @@ final class StorefrontAPI {
         }
     }
 
-    @available(iOS 15.0, macOS 12.0, *)
     func verifyEmailCode(email: String, code: String) async throws {
         guard let url = URL(string: "/api/verify-email-code", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
@@ -828,9 +860,7 @@ final class StorefrontAPI {
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
 
-        if data.isEmpty {
-            return
-        }
+        if data.isEmpty { return }
 
         let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
         guard decoded.ok else {
@@ -838,7 +868,6 @@ final class StorefrontAPI {
         }
     }
 
-    @available(iOS 15.0, macOS 12.0, *)
     func forgotPassword(email: String) async throws {
         guard let url = URL(string: "/api/forgot-password", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
@@ -861,9 +890,7 @@ final class StorefrontAPI {
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
 
-        if data.isEmpty {
-            return
-        }
+        if data.isEmpty { return }
 
         let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
         guard decoded.ok else {
@@ -871,7 +898,6 @@ final class StorefrontAPI {
         }
     }
 
-    @available(iOS 15.0, macOS 12.0, *)
     func resetPassword(token: String, newPassword: String) async throws {
         guard let url = URL(string: "/api/reset-password", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
@@ -894,9 +920,7 @@ final class StorefrontAPI {
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
 
-        if data.isEmpty {
-            return
-        }
+        if data.isEmpty { return }
 
         let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
         guard decoded.ok else {
@@ -904,18 +928,8 @@ final class StorefrontAPI {
         }
     }
 
-    // MARK: - Public API (Gemini price estimate - completion handler)
+    // MARK: - Gemini price estimate
 
-    /// Call the /api/estimate-price endpoint to get a cash offer + listing range.
-    ///
-    /// - Parameters:
-    ///   - name: Optional item name.
-    ///   - description: Optional item description.
-    ///   - imageUrl: Optional public image URL.
-    ///   - imageData: Optional raw image data; if provided it will be base64-encoded
-    ///                and sent as `imageBase64.data`.
-    ///   - imageMimeType: Optional MIME type for `imageData` (e.g. "image/jpeg").
-    ///   - location: Optional location payload; pass `nil` to omit.
     func estimatePrice(
         name: String? = nil,
         description: String? = nil,
@@ -951,14 +965,10 @@ final class StorefrontAPI {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        // If you lock this endpoint down with requireAuthOrIos later,
-        // this header will already be in place.
         request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
 
         do {
-            let body = try JSONEncoder().encode(payload)
-            request.httpBody = body
+            request.httpBody = try JSONEncoder().encode(payload)
         } catch {
             completion(.failure(StorefrontAPIError.underlying(error)))
             return
@@ -994,9 +1004,6 @@ final class StorefrontAPI {
         }.resume()
     }
 
-    // MARK: - Public API (Gemini price estimate - async/await)
-
-    @available(iOS 15.0, macOS 12.0, *)
     func estimatePrice(
         name: String? = nil,
         description: String? = nil,
@@ -1047,232 +1054,3 @@ final class StorefrontAPI {
         return decoded
     }
 }
-
-// MARK: - Example usage (you can delete this in production)
-
-// Completion-based storefront create
-func exampleCreateWithCompletion() {
-    StorefrontAPI.shared.createItem(
-        name: "Test Item",
-        price: 19.99,
-        description: "A nice test item",
-        imageUrl: "https://example.com/image.jpg",
-        tags: ["test", "pawn"],
-        active: true
-    ) { result in
-        switch result {
-        case .success(let id):
-            print("Created storefront item with id:", id)
-        case .failure(let error):
-            print("Storefront create failed:", error)
-        }
-    }
-}
-
-// Completion-based register
-func exampleRegisterWithCompletion() {
-    StorefrontAPI.shared.register(
-        login: "testuser",
-        email: "test@example.com",
-        password: "s3cret!",
-        firstName: "Test",
-        lastName: "User"
-    ) { result in
-        switch result {
-        case .success(let id):
-            print("Registered user with id:", id)
-        case .failure(let error):
-            print("Register failed:", error)
-        }
-    }
-}
-
-// Completion-based login
-func exampleLoginWithCompletion() {
-    StorefrontAPI.shared.login(
-        loginOrEmail: "testuser",
-        password: "s3cret!"
-    ) { result in
-        switch result {
-        case .success(let user):
-            print("Logged in as:", user.username)
-        case .failure(let error):
-            print("Login failed:", error)
-        }
-    }
-}
-
-// Completion-based price estimate
-func exampleEstimatePriceWithCompletion() {
-    StorefrontAPI.shared.estimatePrice(
-        name: "MacBook Pro 14\" 2023",
-        description: "M2 Pro, 16GB RAM, 512GB SSD, good condition",
-        imageUrl: "https://example.com/macbook.jpg"
-    ) { result in
-        switch result {
-        case .success(let response):
-            print("Cash offer:", response.price,
-                  "range:", response.low, "-", response.high,
-                  "confidence:", response.confidence)
-        case .failure(let error):
-            print("Estimate failed:", error)
-        }
-    }
-}
-
-// Completion-based forgot password
-func exampleForgotPasswordWithCompletion() {
-    StorefrontAPI.shared.forgotPassword(email: "test@example.com") { result in
-        switch result {
-        case .success:
-            print("Forgot password email sent (if account exists).")
-        case .failure(let error):
-            print("Forgot password failed:", error)
-        }
-    }
-}
-
-// Completion-based resend verification
-func exampleResendVerificationWithCompletion() {
-    StorefrontAPI.shared.resendVerification(email: "test@example.com") { result in
-        switch result {
-        case .success:
-            print("Verification email re-sent.")
-        case .failure(let error):
-            print("Resend verification failed:", error)
-        }
-    }
-}
-
-// Completion-based verify email code
-func exampleVerifyEmailCodeWithCompletion() {
-    StorefrontAPI.shared.verifyEmailCode(
-        email: "test@example.com",
-        code: "123456"
-    ) { result in
-        switch result {
-        case .success:
-            print("Email verified via code.")
-        case .failure(let error):
-            print("Verify email code failed:", error)
-        }
-    }
-}
-
-// Completion-based reset password
-func exampleResetPasswordWithCompletion(token: String, newPassword: String) {
-    StorefrontAPI.shared.resetPassword(token: token, newPassword: newPassword) { result in
-        switch result {
-        case .success:
-            print("Password reset OK")
-        case .failure(let error):
-            print("Reset password failed:", error)
-        }
-    }
-}
-
-// Async/await (in an async context)
-/*
-@available(iOS 15.0, *)
-func exampleCreateAsync() async {
-    do {
-        let id = try await StorefrontAPI.shared.createItem(
-            name: "Async Item",
-            price: 29.99,
-            description: "Created with async/await",
-            imageUrl: "https://example.com/async-image.jpg",
-            tags: ["async", "pawn"],
-            active: true
-        )
-        print("Created storefront item with id:", id)
-    } catch {
-        print("Storefront create failed:", error)
-    }
-}
-
-@available(iOS 15.0, *)
-func exampleRegisterAsync() async {
-    do {
-        let id = try await StorefrontAPI.shared.register(
-            login: "asyncuser",
-            email: "async@example.com",
-            password: "s3cret!"
-        )
-        print("Registered user with id:", id)
-    } catch {
-        print("Register failed:", error)
-    }
-}
-
-@available(iOS 15.0, *)
-func exampleLoginAsync() async {
-    do {
-        let user = try await StorefrontAPI.shared.login(
-            loginOrEmail: "asyncuser",
-            password: "s3cret!"
-        )
-        print("Logged in as:", user.username)
-    } catch {
-        print("Login failed:", error)
-    }
-}
-
-@available(iOS 15.0, *)
-func exampleEstimatePriceAsync() async {
-    do {
-        let estimate = try await StorefrontAPI.shared.estimatePrice(
-            name: "PlayStation 5",
-            description: "Disc edition, 2 controllers, great condition",
-            imageUrl: "https://example.com/ps5.jpg"
-        )
-        print("Cash offer:", estimate.price,
-              "range:", estimate.low, "-", estimate.high,
-              "confidence:", estimate.confidence)
-    } catch {
-        print("Estimate failed:", error)
-    }
-}
-
-@available(iOS 15.0, *)
-func exampleForgotPasswordAsync() async {
-    do {
-        try await StorefrontAPI.shared.forgotPassword(email: "async@example.com")
-        print("Forgot password email sent (if account exists).")
-    } catch {
-        print("Forgot password failed:", error)
-    }
-}
-
-@available(iOS 15.0, *)
-func exampleResendVerificationAsync() async {
-    do {
-        try await StorefrontAPI.shared.resendVerification(email: "async@example.com")
-        print("Verification email re-sent.")
-    } catch {
-        print("Resend verification failed:", error)
-    }
-}
-
-@available(iOS 15.0, *)
-func exampleVerifyEmailCodeAsync() async {
-    do {
-        try await StorefrontAPI.shared.verifyEmailCode(
-            email: "async@example.com",
-            code: "123456"
-        )
-        print("Email verified via code.")
-    } catch {
-        print("Verify email code failed:", error)
-    }
-}
-
-@available(iOS 15.0, *)
-func exampleResetPasswordAsync(token: String, newPassword: String) async {
-    do {
-        try await StorefrontAPI.shared.resetPassword(token: token, newPassword: newPassword)
-        print("Password reset OK")
-    } catch {
-        print("Reset password failed:", error)
-    }
-}
-*/
