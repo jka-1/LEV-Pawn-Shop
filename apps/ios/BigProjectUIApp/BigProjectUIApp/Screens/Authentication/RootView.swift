@@ -12,14 +12,15 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if session.isLoggedIn {
-                // 👉 Load your real app here
-                ContentView()
+            if session.isAuthenticated {
+                // 👉 As soon as you're logged in, go straight to your main app UI
+                ContentView()           // or MainScreen() if that's your real landing view
             } else {
-                // 👉 Load login flow
-                LoginView()
+                // 👉 Login / Register / Forgot Password live in here
+                NavigationStack {
+                    LoginView()
+                }
             }
         }
-        .animation(.easeInOut, value: session.isLoggedIn)
     }
 }

@@ -15,74 +15,61 @@ struct LoginView: View {
     @State private var errorMessage = ""
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                PawnTheme.background.ignoresSafeArea()
+        ZStack {
+            PawnTheme.background.ignoresSafeArea()
 
-                VStack(spacing: 20) {
+            VStack(spacing: 20) {
+                Text("Sign In")
+                    .font(.largeTitle)
+                    .bold()
+                    .foregroundStyle(.white)
 
-                    Text("Sign In")
-                        .font(.largeTitle)
-                        .bold()
-                        .foregroundStyle(PawnTheme.gold)
-
-                    // Email
-                    TextField("Email", text: $email)
-                        .textFieldStyle(.roundedBorder)
-                        .autocapitalization(.none)
-                        .padding(.horizontal)
-
-                    // Password
-                    SecureField("Password", text: $password)
-                        .textFieldStyle(.roundedBorder)
-                        .padding(.horizontal)
-
-                    if !errorMessage.isEmpty {
-                        Text(errorMessage)
-                            .foregroundColor(.red)
-                    }
-
-                    // Sign In Button
-                    Button {
-                        Task {
-                            do {
-                                try await session.login(email: email, password: password)
-                            } catch {
-                                errorMessage = error.localizedDescription
-                            }
-                        }
-                    } label: {
-                        Text("Sign In")
-                            .foregroundStyle(.black)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(PawnTheme.gold)
-                            .cornerRadius(12)
-                    }
+                TextField("Email", text: $email)
+                    .textFieldStyle(.roundedBorder)
+                    .keyboardType(.emailAddress)
+                    .autocapitalization(.none)
                     .padding(.horizontal)
 
-                    // Forgot password
-                    NavigationLink {
-                        ForgotPasswordView()
-                            .environmentObject(session)
-                    } label: {
-                        Text("Forgot Password?")
-                            .foregroundStyle(.white)
-                    }
+                SecureField("Password", text: $password)
+                    .textFieldStyle(.roundedBorder)
+                    .padding(.horizontal)
 
-                    // Create new account
-                    NavigationLink {
-                        RegisterView()
-                            .environmentObject(session)
-                    } label: {
-                        Text("Create New Account")
-                            .foregroundStyle(PawnTheme.gold)
-                    }
-
-                    Spacer()
+                if !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .foregroundColor(.red)
+                        .padding(.horizontal)
                 }
-                .padding(.top, 60)
+
+                Button("Sign In") {
+                    Task {
+                        do {
+                            try await session.login(email: email, password: password)
+                        } catch {
+                            errorMessage = error.localizedDescription
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(PawnTheme.gold)
+                .foregroundColor(.black)
+                .cornerRadius(14)
+                .padding(.horizontal)
+
+                // 👇 These will now work because RootView wraps us in NavigationStack
+                NavigationLink("Forgot Password?") {
+                    ForgotPasswordView()
+                }
+                .foregroundColor(.white)
+
+                NavigationLink("Create New Account") {
+                    RegisterView()
+                }
+                .foregroundColor(PawnTheme.gold)
+
+                Spacer()
             }
+            .padding(.top, 60)
         }
     }
 }

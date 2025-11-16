@@ -12,76 +12,78 @@ struct RegisterView: View {
     @State private var firstName = ""
     @State private var lastName = ""
     @State private var email = ""
-    @State private var phone = ""
     @State private var password = ""
+    @State private var confirmPassword = ""
+
     @State private var errorMessage = ""
+    @State private var navigateToVerify = false
 
     var body: some View {
+        VStack(spacing: 20) {
 
-        ZStack {
-            PawnTheme.background.ignoresSafeArea()
+            Text("Create Account")
+                .font(.largeTitle.bold())
+                .foregroundColor(.white)
 
-            ScrollView {
-                VStack(spacing: 22) {
-
-                    Text("Create Account")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(PawnTheme.gold)
-                        .padding(.top, 30)
-
-                    groupField("First Name", text: $firstName)
-                    groupField("Last Name", text: $lastName)
-                    groupField("Email", text: $email)
-                    groupField("Phone Number", text: $phone)
-                    secureGroupField("Password", text: $password)
-
-                    if !errorMessage.isEmpty {
-                        Text(errorMessage)
-                            .foregroundColor(.red)
-                            .padding(.top, 5)
-                    }
-
-                    Button {
-                        Task {
-                            do {
-                                try await session.register(
-                                    firstName: firstName,
-                                    lastName: lastName,
-                                    email: email,
-                                    phone: phone,
-                                    password: password
-                                )
-                            } catch {
-                                errorMessage = error.localizedDescription
-                            }
-                        }
-                    } label: {
-                        Text("Register")
-                            .foregroundColor(.black)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(PawnButtonStyle())
-
-                    Spacer()
-                }
-                .padding()
+            Group {
+                TextField("First Name", text: $firstName)
+                TextField("Last Name", text: $lastName)
+                TextField("Email", text: $email)
+                    .autocapitalization(.none)
+                SecureField("Password", text: $password)
+                SecureField("Confirm Password", text: $confirmPassword)
             }
+            .textFieldStyle(.roundedBorder)
+
+            Button {
+                Task {
+                    await register()
+                }
+            } label: {
+                Text("Register")
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(PawnTheme.gold)
+                    .foregroundColor(.black)
+                    .cornerRadius(8)
+            }
+
+            if navigateToVerify {
+                NavigationLink("", destination:
+                    EmailCodeVerificationView(email: email),
+                    isActive: $navigateToVerify
+                )
+            }
+
+            if !errorMessage.isEmpty {
+                Text(errorMessage).foregroundColor(.red)
+            }
+
+            Spacer()
         }
+        .padding()
+        .background(PawnTheme.background.ignoresSafeArea())
     }
 
-    private func groupField(_ title: String, text: Binding<String>) -> some View {
-        TextField(title, text: text)
-            .padding()
-            .background(.white.opacity(0.08))
-            .cornerRadius(12)
-            .foregroundColor(.white)
-    }
+    private func register() async {
+        guard password == confirmPassword else {
+            errorMessage = "Passwords do not match"
+            return
+        }
 
-    private func secureGroupField(_ title: String, text: Binding<String>) -> some View {
-        SecureField(title, text: text)
-            .padding()
-            .background(.white.opacity(0.08))
-            .cornerRadius(12)
-            .foregroundColor(.white)
+        do {
+            try await session.register(
+                firstName: firstName,
+                lastName: lastName,
+                email: email,
+                password: password
+            )
+
+            let sent = await session.requestVerificationCode(email: email)
+            if sent { navigateToVerify = true }
+
+        } catch {
+            errorMessage = "Email already exists or invalid"
+        }
     }
 }

@@ -7,74 +7,93 @@
 import SwiftUI
 
 struct ForgotPasswordView: View {
-
     @EnvironmentObject var session: SessionManager
 
-    @State private var email: String = ""
-    @State private var errorMessage: String?
-    @State private var navigateToCode: Bool = false
-    @State private var isSending: Bool = false
+    @State private var email = ""
+    @State private var navigate = false
+    @State private var error = ""
 
     var body: some View {
-        ZStack {
-            PawnTheme.background.ignoresSafeArea()
+        VStack(spacing: 20) {
+            Text("Forgot Password")
+                .font(.largeTitle.bold())
+                .foregroundColor(.white)
 
-            VStack(spacing: 20) {
+            TextField("Email", text: $email)
+                .textFieldStyle(.roundedBorder)
+                .autocapitalization(.none)
 
-                Text("Reset Password")
-                    .font(.largeTitle.bold())
-                    .foregroundStyle(PawnTheme.gold)
-
-                Text("Enter your email and we’ll send a 6-digit reset code.")
-                    .foregroundColor(.white.opacity(0.75))
-                    .multilineTextAlignment(.center)
-
-                TextField("Email", text: $email)
-                    .padding()
-                    .background(.white.opacity(0.1))
-                    .cornerRadius(12)
-                    .foregroundColor(.white)
-                    .keyboardType(.emailAddress)
-
-                Button {
-                    Task { await sendCode() }
-                } label: {
-                    if isSending {
-                        ProgressView().frame(maxWidth: .infinity)
-                    } else {
-                        Text("Send Reset Code")
-                            .foregroundColor(.black)
-                            .frame(maxWidth: .infinity)
-                    }
+            Button("Send Code") {
+                Task {
+                    let sent = await session.sendForgotPasswordCode(email: email)
+                    if sent { navigate = true }
+                    else { error = "Email not found" }
                 }
-                .buttonStyle(PawnButtonStyle())
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .foregroundColor(.red)
-                }
-
-                NavigationLink("", isActive: $navigateToCode) {
-                    EmailCodeVerificationView(email: email)
-                }
-
-                Spacer()
             }
+            .frame(maxWidth: .infinity)
             .padding()
+            .background(PawnTheme.gold)
+            .foregroundColor(.black)
+            .cornerRadius(8)
+
+            NavigationLink("Reset Password", destination:
+                ResetPasswordView(email: email),
+                isActive: $navigate
+            )
+
+            if !error.isEmpty {
+                Text(error).foregroundColor(.red)
+            }
+
+            Spacer()
         }
+        .padding()
+        .background(PawnTheme.background.ignoresSafeArea())
     }
+}
 
-    private func sendCode() async {
-        isSending = true
-        errorMessage = nil
+struct ResetPasswordView: View {
+    let email: String
+    @EnvironmentObject var session: SessionManager
 
-        let sent = await session.sendVerificationCode(to: email)
+    @State private var code = ""
+    @State private var newPassword = ""
+    @State private var message = ""
 
-        isSending = false
-        if sent {
-            navigateToCode = true
-        } else {
-            errorMessage = "No account found with that email."
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Reset Password")
+                .font(.largeTitle.bold())
+                .foregroundColor(.white)
+
+            TextField("Verification Code", text: $code)
+                .keyboardType(.numberPad)
+                .textFieldStyle(.roundedBorder)
+
+            SecureField("New Password", text: $newPassword)
+                .textFieldStyle(.roundedBorder)
+
+            Button("Reset") {
+                Task {
+                    let ok = await session.resetPassword(
+                        token: code,
+                        newPassword: newPassword,
+                        email: email
+                    )
+                    message = ok ? "Password Updated!" : "Invalid code"
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(PawnTheme.gold)
+            .foregroundColor(.black)
+            .cornerRadius(8)
+
+            Text(message).foregroundColor(.white)
+
+            Spacer()
         }
+        .padding()
+        .background(PawnTheme.background.ignoresSafeArea())
     }
 }

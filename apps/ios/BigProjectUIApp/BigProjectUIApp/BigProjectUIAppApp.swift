@@ -9,16 +9,15 @@ import SwiftUI
 import SwiftData
 
 @main
-struct BigProjectUIApp: App {
-
-    @StateObject var session = SessionManager.shared
+struct BigProjectUIAppApp: App {
+    @StateObject private var session = SessionManager.shared   // ✅ use singleton
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(session)
+                .modelContainer(for: Item.self)
                 .preferredColorScheme(.dark)
         }
-        .modelContainer(for: Item.self)
     }
 }

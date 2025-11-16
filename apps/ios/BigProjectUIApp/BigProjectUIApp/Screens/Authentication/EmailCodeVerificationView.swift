@@ -7,70 +7,43 @@
 import SwiftUI
 
 struct EmailCodeVerificationView: View {
-
     let email: String
-    @EnvironmentObject var session: SessionManager
 
-    @State private var code: String = ""
-    @State private var statusMessage: String?
-    @State private var isVerifying: Bool = false
-    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var session: SessionManager
+    @State private var code = ""
+    @State private var message = ""
 
     var body: some View {
         VStack(spacing: 20) {
+            Text("Verify Email")
+                .font(.title.bold())
+                .foregroundColor(.white)
 
-            Text("Enter Verification Code")
-                .font(.title).bold()
+            Text("Enter the 6-digit code sent to:")
+                .foregroundColor(.gray)
+            Text(email).foregroundColor(PawnTheme.gold)
 
-            Text("We sent a 6-digit code to \(email).")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-
-            TextField("6-digit code", text: $code)
-                .textFieldStyle(.roundedBorder)
+            TextField("Code", text: $code)
                 .keyboardType(.numberPad)
+                .textFieldStyle(.roundedBorder)
 
-            Button {
-                Task { await verify() }
-            } label: {
-                if isVerifying {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                } else {
-                    Text("Verify")
-                        .frame(maxWidth: .infinity)
+            Button("Verify") {
+                Task {
+                    let ok = await session.verifyEmailCode(email: email, code: code)
+                    message = ok ? "Verified!" : "Invalid code"
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(code.count != 6 || isVerifying)
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(PawnTheme.gold)
+            .cornerRadius(8)
+            .foregroundColor(.black)
 
-            if let statusMessage {
-                Text(statusMessage)
-                    .foregroundColor(.red)
-            }
+            Text(message).foregroundColor(.white)
 
             Spacer()
         }
         .padding()
-        .navigationTitle("Verify Email")
-    }
-
-    private func verify() async {
-        await MainActor.run {
-            isVerifying = true
-            statusMessage = nil
-        }
-
-        let ok = await session.verifyCode(email: email, code: code)
-
-        await MainActor.run {
-            isVerifying = false
-            if ok {
-                statusMessage = "Verified! You can now reset your password / log in."
-                // you could dismiss() here or navigate to login
-            } else {
-                statusMessage = "Incorrect code. Please try again."
-            }
-        }
+        .background(PawnTheme.background.ignoresSafeArea())
     }
 }
