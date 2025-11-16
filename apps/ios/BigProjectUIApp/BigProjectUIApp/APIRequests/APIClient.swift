@@ -106,6 +106,12 @@ struct ResetPasswordPayload: Encodable {
     let password: String
 }
 
+/// Request body for POST /api/verify-email-code
+struct VerifyEmailCodePayload: Encodable {
+    let email: String
+    let code: String
+}
+
 // MARK: - Gemini Price Estimate Models
 
 /// Optional location payload, mirrors the `location` object the server expects.
@@ -577,6 +583,67 @@ final class StorefrontAPI {
         }.resume()
     }
 
+    /// Verify email using a 6-digit code instead of the link.
+    /// Mirrors POST /api/verify-email-code
+    func verifyEmailCode(
+        email: String,
+        code: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        guard let url = URL(string: "/api/verify-email-code", relativeTo: baseURL) else {
+            completion(.failure(StorefrontAPIError.invalidURL))
+            return
+        }
+
+        let payload = VerifyEmailCodePayload(email: email, code: code)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do {
+            request.httpBody = try JSONEncoder().encode(payload)
+        } catch {
+            completion(.failure(StorefrontAPIError.underlying(error)))
+            return
+        }
+
+        urlSession.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(StorefrontAPIError.underlying(error)))
+                return
+            }
+
+            guard let http = response as? HTTPURLResponse else {
+                completion(.failure(StorefrontAPIError.httpStatus(-1)))
+                return
+            }
+
+            guard (200..<300).contains(http.statusCode) else {
+                completion(.failure(StorefrontAPIError.httpStatus(http.statusCode)))
+                return
+            }
+
+            guard let data = data, !data.isEmpty else {
+                completion(.success(()))
+                return
+            }
+
+            do {
+                let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
+                if decoded.ok {
+                    completion(.success(()))
+                } else {
+                    completion(.failure(
+                        StorefrontAPIError.serverError(message: "Verify email code failed")
+                    ))
+                }
+            } catch {
+                completion(.failure(StorefrontAPIError.decodingFailed))
+            }
+        }.resume()
+    }
+
     /// Start password reset flow (sends email if the account exists).
     /// Mirrors POST /api/forgot-password
     func forgotPassword(
@@ -734,6 +801,39 @@ final class StorefrontAPI {
             throw StorefrontAPIError.serverError(
                 message: decoded.message ?? "Verification resend failed"
             )
+        }
+    }
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func verifyEmailCode(email: String, code: String) async throws {
+        guard let url = URL(string: "/api/verify-email-code", relativeTo: baseURL) else {
+            throw StorefrontAPIError.invalidURL
+        }
+
+        let payload = VerifyEmailCodePayload(email: email, code: code)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(payload)
+
+        let (data, response) = try await urlSession.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw StorefrontAPIError.httpStatus(-1)
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            throw StorefrontAPIError.httpStatus(http.statusCode)
+        }
+
+        if data.isEmpty {
+            return
+        }
+
+        let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
+        guard decoded.ok else {
+            throw StorefrontAPIError.serverError(message: "Verify email code failed")
         }
     }
 
@@ -1043,6 +1143,21 @@ func exampleResendVerificationWithCompletion() {
     }
 }
 
+// Completion-based verify email code
+func exampleVerifyEmailCodeWithCompletion() {
+    StorefrontAPI.shared.verifyEmailCode(
+        email: "test@example.com",
+        code: "123456"
+    ) { result in
+        switch result {
+        case .success:
+            print("Email verified via code.")
+        case .failure(let error):
+            print("Verify email code failed:", error)
+        }
+    }
+}
+
 // Completion-based reset password
 func exampleResetPasswordWithCompletion(token: String, newPassword: String) {
     StorefrontAPI.shared.resetPassword(token: token, newPassword: newPassword) { result in
@@ -1134,6 +1249,19 @@ func exampleResendVerificationAsync() async {
         print("Verification email re-sent.")
     } catch {
         print("Resend verification failed:", error)
+    }
+}
+
+@available(iOS 15.0, *)
+func exampleVerifyEmailCodeAsync() async {
+    do {
+        try await StorefrontAPI.shared.verifyEmailCode(
+            email: "async@example.com",
+            code: "123456"
+        )
+        print("Email verified via code.")
+    } catch {
+        print("Verify email code failed:", error)
     }
 }
 
