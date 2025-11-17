@@ -26,7 +26,13 @@ export default function UploadPage() {
   const [aiLoading, setAiLoading] = React.useState(false);
   const [aiNote, setAiNote] = React.useState<string | null>(null);
   const [localFile, setLocalFile] = React.useState<File | null>(null);
+  const [showStopButton, setShowStopButton] = React.useState(false);
   const controllerRef = React.useRef<AbortController | null>(null);
+
+  // Clear AI price info when form changes
+  React.useEffect(() => {
+    setAiNote(null);
+  }, [draft.name, draft.description, draft.imageUrl]);
 
   async function handleFileSelect(file: File) {
     setError(null); setOk(null);
@@ -107,6 +113,7 @@ export default function UploadPage() {
 
       setOk("Item added!");
       setDraft({ name: "", price: "", description: "", imageUrl: "" });
+      setAiNote(null); // Clear AI price info when item is submitted
     } catch (err: any) {
       setError(err?.message || "Failed to save item.");
       setTimeout(() => errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
@@ -121,6 +128,8 @@ export default function UploadPage() {
     if (!localFile && !draft.imageUrl.trim() && !draft.description.trim()) return setError("Provide an image or description for a better estimate.");
 
     setAiLoading(true);
+    // Show stop button after 2 seconds
+    const stopButtonTimer = setTimeout(() => setShowStopButton(true), 2000);
     try {
       controllerRef.current?.abort();
       controllerRef.current = new AbortController();
@@ -184,6 +193,8 @@ export default function UploadPage() {
       setTimeout(() => errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
     } finally {
       setAiLoading(false);
+      clearTimeout(stopButtonTimer);
+      setShowStopButton(false);
     }
   }
 
@@ -231,7 +242,7 @@ export default function UploadPage() {
                   <button type="button" className="btn btn--gold" onClick={estimateWithAI} disabled={aiLoading} aria-disabled={aiLoading}>
                     {aiLoading ? 'Estimating…' : 'Estimate with AI'}
                   </button>
-                  {aiLoading && (
+                  {aiLoading && showStopButton && (
                     <button type="button" className="btn btn--gold" onClick={cancelEstimate}>
                       Stop
                     </button>

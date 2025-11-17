@@ -110,7 +110,7 @@ function requireAuth(req, res, next) {
   try {
     req.user = jwt.verify(t, JWT_ACCESS_SECRET);
     next();
-  } catch {
+  } catch (parseError) {
     return res.status(401).json({ error: 'AccessTokenExpired' });
   }
 }
@@ -139,7 +139,7 @@ async function fetchImageAsBase64(url) {
       ? 'image/heif'
       : 'image/jpeg';
     return { mimeType: mime, data: b.toString('base64') };
-  } catch {
+  } catch (parseError) {
     return null;
   }
 }
@@ -200,18 +200,26 @@ async function estimatePriceWithGemini({ name, description, imageUrl, imageBase6
     throw new Error(`Gemini error HTTP ${resp.status}: ${errText}`);
   }
   const data = await resp.json();
-  if (!data) throw lastErr || new Error('Gemini request failed');
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.candidates?.[0]?.content?.parts?.[0]?.data || '';
+  if (!data) throw new Error('Gemini request failed');
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   let parsed;
   try {
-    parsed = JSON.parse(text);
-  } catch {
-    // fallback: attempt to extract JSON-like substring
+    // Clean up control characters and normalize whitespace
+    const cleanedText = text
+      .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim();
+    
+    parsed = JSON.parse(cleanedText);
+  } catch (parseError) {
+    console.log('Initial JSON parse failed, attempting fallback extraction...');
+    try {
+      // fallback: attempt to extract JSON-like substring
     const m = text.match(/\{[\s\S]*\}/);
     parsed = m ? JSON.parse(m[0]) : null;
   }
   if (!parsed || typeof parsed.price !== 'number') {
-    throw new Error('Invalid response from Gemini');
+    throw new Error('Invalid response from Gemini: missing or invalid price field');
   }
   return parsed;
 }
