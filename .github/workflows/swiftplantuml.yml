@@ -10,6 +10,7 @@ on:
 jobs:
   swiftplantuml:
     runs-on: macos-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -19,20 +20,25 @@ jobs:
       - name: Install Homebrew
         run: |
           /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
-          echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> $GITHUB_ENV
-          echo 'eval "$(/usr/local/bin/brew shellenv)"' >> $GITHUB_ENV
-          eval "$(/opt/homebrew/bin/brew shellenv || true)"
-          eval "$(/usr/local/bin/brew shellenv || true)"
+
+          if [ -d "/opt/homebrew/bin" ]; then
+            echo "HOMEBREW_PREFIX=/opt/homebrew" >> $GITHUB_ENV
+          elif [ -d "/usr/local/bin" ]; then
+            echo "HOMEBREW_PREFIX=/usr/local" >> $GITHUB_ENV
+          fi
+          
+          echo "$HOMEBREW_PREFIX/bin" >> $GITHUB_PATH
 
       - name: Install SwiftPlantUML
         run: |
           brew tap marcoeidinger/plantuml || true
-          brew install swiftplantuml || (brew update && brew install swiftplantuml)
+          brew update
+          brew install swiftplantuml
 
-      - name: Install PlantUML (jar) and Java
+      - name: Install Java + PlantUML
         run: |
           brew install --cask temurin || true
-          curl -L -o plantuml.jar https://downloads.sourceforge.net/project/plantuml/plantuml.jar || true
+          curl -L -o plantuml.jar https://downloads.sourceforge.net/project/plantuml/plantuml.jar
 
       - name: Generate PlantUML script (.puml)
         run: |
@@ -40,10 +46,10 @@ jobs:
 
       - name: Render diagram to PNG
         run: |
-          java -jar plantuml.jar -tpng diagram.puml -o output || true
-          ls -la output || true
+          java -jar plantuml.jar -tpng diagram.puml -o output
+          ls -la output
 
-      - name: Upload artifacts (puml & images)
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: swiftplantuml-diagrams
