@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import SwiftData
 
 struct AddItemView: View {
@@ -133,20 +134,55 @@ struct AddItemView: View {
 
     private func saveItem() {
         guard let price = Decimal(string: priceString) else { return }
-
-        let data = selectedImage?.jpegData(compressionQuality: 0.8)
-
-        let newItem = Item(
-            name: name,
-            price: price,
-            condition: condition,
-            itemDescription: descriptionText,
-            category: category,
-            imageData: data,
-            isInCart: false
-        )
-
-        context.insert(newItem)
-        dismiss()
+        
+        Task {
+            do {
+                var imageUrl = ""
+                
+                // If there's an image, upload it to Cloudinary first
+                if let image = selectedImage, let imageData = image.jpegData(compressionQuality: 0.8) {
+                    // Get upload signature from server
+                    let signature = try await StorefrontAPI.shared.getUploadSignature()
+                    
+                    // Upload image to Cloudinary
+                    imageUrl = try await StorefrontAPI.shared.uploadImageToCloudinary(imageData, signature: signature)
+                }
+                
+                // Create item on server
+                let serverItemId = try await StorefrontAPI.shared.createItem(
+                    name: name,
+                    price: NSDecimalNumber(decimal: price).doubleValue,
+                    description: descriptionText.isEmpty ? nil : descriptionText,
+                    imageUrl: imageUrl.isEmpty ? "https://via.placeholder.com/300x200?text=No+Image" : imageUrl,
+                    tags: [condition, category],
+                    active: true
+                )
+                
+                // Also save locally for offline access
+                let newItem = Item(
+                    name: name,
+                    price: price,
+                    condition: condition,
+                    itemDescription: descriptionText,
+                    category: category,
+                    imageData: selectedImage?.jpegData(compressionQuality: 0.8),
+                    isInCart: false
+                )
+                
+                context.insert(newItem)
+                
+                // Dismiss on main thread
+                await MainActor.run {
+                    dismiss()
+                }
+                
+            } catch {
+                print("Error uploading item: \(error)")
+                // Show error to user - for now just dismiss
+                await MainActor.run {
+                    dismiss()
+                }
+            }
+        }
     }
 }

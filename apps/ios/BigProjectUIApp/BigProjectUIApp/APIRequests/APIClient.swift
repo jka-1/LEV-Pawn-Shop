@@ -1086,4 +1086,108 @@ final class StorefrontAPI {
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
     }
+
+    // MARK: - Upload Methods
+    
+    struct UploadSignatureResponse: Codable {
+        let ok: Bool
+        let cloudName: String
+        let apiKey: String
+        let timestamp: Int
+        let folder: String
+        let signature: String
+        
+        enum CodingKeys: String, CodingKey {
+            case ok
+            case cloudName = "cloudName"
+            case apiKey = "apiKey"
+            case timestamp
+            case folder
+            case signature
+        }
+    }
+    
+    func getUploadSignature() async throws -> UploadSignatureResponse {
+        guard let url = URL(string: "/api/uploads/sign", relativeTo: baseURL) else {
+            throw StorefrontAPIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
+        
+        let (data, response) = try await urlSession.data(for: request)
+        
+        guard let http = response as? HTTPURLResponse else {
+            throw StorefrontAPIError.httpStatus(-1)
+        }
+        
+        guard (200..<300).contains(http.statusCode) else {
+            throw StorefrontAPIError.httpStatus(http.statusCode)
+        }
+        
+        return try JSONDecoder().decode(UploadSignatureResponse.self, from: data)
+    }
+    
+    func uploadImageToCloudinary(_ imageData: Data, signature: UploadSignatureResponse) async throws -> String {
+        guard let url = URL(string: "https://api.cloudinary.com/v1_1/\(signature.cloudName)/image/upload") else {
+            throw StorefrontAPIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        var body = Data()
+        
+        // Add api_key
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"api_key\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(signature.apiKey)\r\n".data(using: .utf8)!)
+        
+        // Add timestamp
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"timestamp\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(signature.timestamp)\r\n".data(using: .utf8)!)
+        
+        // Add folder
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"folder\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(signature.folder)\r\n".data(using: .utf8)!)
+        
+        // Add signature
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"signature\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(signature.signature)\r\n".data(using: .utf8)!)
+        
+        // Add file
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"image.jpg\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(imageData)
+        body.append("\r\n".data(using: .utf8)!)
+        
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        request.httpBody = body
+        
+        let (responseData, response) = try await urlSession.data(for: request)
+        
+        guard let http = response as? HTTPURLResponse else {
+            throw StorefrontAPIError.httpStatus(-1)
+        }
+        
+        guard (200..<300).contains(http.statusCode) else {
+            throw StorefrontAPIError.httpStatus(http.statusCode)
+        }
+        
+        struct CloudinaryResponse: Codable {
+            let secure_url: String
+        }
+        
+        let cloudinaryResponse = try JSONDecoder().decode(CloudinaryResponse.self, from: responseData)
+        return cloudinaryResponse.secure_url
+    }
 }

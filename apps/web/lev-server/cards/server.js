@@ -49,7 +49,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 // ----- DB CONNECT (once) -----
-let db, Users, Urls, EmailTokens;
+let db, Users, Urls, EmailTokens, ResetTokens;
 (async () => {
   if (!MONGODB_URI) {
     console.warn('MONGODB_URI not set; skipping DB connect. Storefront endpoints will be unavailable, but AI pricing will work.');
@@ -63,9 +63,113 @@ let db, Users, Urls, EmailTokens;
     Urls = db.collection(MONGODB_URLS_COLL);
     await Urls.createIndex({ createdAt: -1 });
 
+// Code-based email verification (what the app expects)
+app.post('/api/verify-email-code', async (req, res) => {
+  try {
+    const { email, code } = req.body || {};
+    if (!email || !code) return res.status(400).json({ ok: false, error: 'MissingFields' });
+
+    const user = await Users.findOne({ Email: email });
+    if (!user) return res.status(404).json({ ok: false, error: 'UserNotFound' });
+    if (user.Verified) return res.status(200).json({ ok: true, message: 'AlreadyVerified' });
+
+    // Find verification token - code is the token
+    const token = await EmailTokens.findOne({ 
+      userId: user._id, 
+      token: code,
+      expiresAt: { $gt: new Date() }
+    });
+
+    if (!token) return res.status(400).json({ ok: false, error: 'InvalidOrExpiredCode' });
+
+    // Verify user and clean up token
+    await Users.updateOne({ _id: user._id }, { $set: { Verified: true } });
+    await EmailTokens.deleteOne({ _id: token._id });
+
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error('verify-email-code error:', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// Forgot password endpoint
+app.post('/api/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ ok: false, error: 'EmailRequired' });
+
+    const user = await Users.findOne({ Email: email });
+    if (!user) return res.status(200).json({ ok: true }); // Don't reveal if user exists
+
+    // Clean up any existing reset tokens
+    await ResetTokens.deleteMany({ userId: user._id });
+
+    // Create reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    await ResetTokens.insertOne({
+      userId: user._id,
+      token: resetToken,
+      expiresAt,
+      createdAt: new Date()
+    });
+
+    // Send reset email
+    const resetUrl = `${process.env.APP_BASE_URL || 'https://bibe.stream'}/reset-password?token=${resetToken}`;
+    await sendEmail({
+      to: email,
+      subject: 'Password Reset Request',
+      text: `You requested a password reset. Click this link to reset your password: ${resetUrl}\n\nThis link expires in 24 hours.`,
+      html: `<p>You requested a password reset.</p><p><a href="${resetUrl}">Click here to reset your password</a></p><p>This link expires in 24 hours.</p>`
+    });
+
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error('forgot-password error:', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// Reset password endpoint
+app.post('/api/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body || {};
+    if (!token || !password) return res.status(400).json({ ok: false, error: 'MissingFields' });
+
+    // Find valid reset token
+    const resetToken = await ResetTokens.findOne({ 
+      token: token,
+      expiresAt: { $gt: new Date() }
+    });
+
+    if (!resetToken) return res.status(400).json({ ok: false, error: 'InvalidOrExpiredToken' });
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Update user password and clean up token
+    await Users.updateOne(
+      { _id: resetToken.userId }, 
+      { $set: { PasswordHash: hashedPassword } }
+    );
+    await ResetTokens.deleteOne({ _id: resetToken._id });
+
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error('reset-password error:', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
     EmailTokens = db.collection('email_tokens');
+    ResetTokens = db.collection('reset_tokens');
     await EmailTokens.createIndex({ token: 1 }, { unique: true });
     await EmailTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+    await ResetTokens.createIndex({ token: 1 }, { unique: true });
+    await ResetTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
     console.log(`Mongo OK → db=${MONGODB_DB}, users=${MONGODB_USERS_COLL}, urls=${MONGODB_URLS_COLL}`);
   } catch (err) {
@@ -566,6 +670,107 @@ app.post('/api/resend-verification', async (req, res) => {
   } catch (e) {
     console.error('resend-verification error:', e);
     return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+
+// Code-based email verification (what the app expects)
+app.post('/api/verify-email-code', async (req, res) => {
+  try {
+    const { email, code } = req.body || {};
+    if (!email || !code) return res.status(400).json({ ok: false, error: 'MissingFields' });
+
+    const user = await Users.findOne({ Email: email });
+    if (!user) return res.status(404).json({ ok: false, error: 'UserNotFound' });
+    if (user.Verified) return res.status(200).json({ ok: true, message: 'AlreadyVerified' });
+
+    // Find verification token
+    const token = await EmailTokens.findOne({ 
+      userId: user._id, 
+      token: code,
+      expiresAt: { $gt: new Date() }
+    });
+
+    if (!token) return res.status(400).json({ ok: false, error: 'InvalidOrExpiredCode' });
+
+    // Verify user and clean up token
+    await Users.updateOne({ _id: user._id }, { $set: { Verified: true } });
+    await EmailTokens.deleteOne({ _id: token._id });
+
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error('verify-email-code error:', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// Forgot password endpoint
+app.post('/api/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ ok: false, error: 'EmailRequired' });
+
+    const user = await Users.findOne({ Email: email });
+    if (!user) return res.status(200).json({ ok: true }); // Don't reveal if user exists
+
+    // Clean up any existing reset tokens
+    await ResetTokens.deleteMany({ userId: user._id });
+
+    // Create reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    await ResetTokens.insertOne({
+      userId: user._id,
+      token: resetToken,
+      expiresAt,
+      createdAt: new Date()
+    });
+
+    // Send reset email
+    const resetUrl = `${process.env.APP_BASE_URL || 'https://bibe.stream'}/reset-password?token=${resetToken}`;
+    await sendEmail({
+      to: email,
+      subject: 'Password Reset Request',
+      text: `You requested a password reset. Click this link to reset your password: ${resetUrl}\n\nThis link expires in 24 hours.`,
+      html: `<p>You requested a password reset.</p><p><a href="${resetUrl}">Click here to reset your password</a></p><p>This link expires in 24 hours.</p>`
+    });
+
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error('forgot-password error:', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// Reset password endpoint
+app.post('/api/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body || {};
+    if (!token || !password) return res.status(400).json({ ok: false, error: 'MissingFields' });
+
+    // Find valid reset token
+    const resetToken = await ResetTokens.findOne({ 
+      token: token,
+      expiresAt: { $gt: new Date() }
+    });
+
+    if (!resetToken) return res.status(400).json({ ok: false, error: 'InvalidOrExpiredToken' });
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Update user password and clean up token
+    await Users.updateOne(
+      { _id: resetToken.userId }, 
+      { $set: { Password: hashedPassword } }
+    );
+    await ResetTokens.deleteOne({ _id: resetToken._id });
+
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error('reset-password error:', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
 

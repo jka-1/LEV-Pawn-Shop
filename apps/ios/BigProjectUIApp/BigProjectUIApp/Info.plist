@@ -3,6 +3,12 @@
 <plist version="1.0">
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>This app needs your location to suggest the safest, optimal meetup point.</string>
+	<string>This app needs your location to suggest the safest, optimal meetup point.&#13;</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs access to camera to take photos of items for sale.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs access to photo library to select photos of items for sale.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>This app needs permission to save photos to your library.</string>
 </dict>
 </plist>
