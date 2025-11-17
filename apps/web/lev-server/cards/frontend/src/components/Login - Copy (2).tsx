@@ -1,9 +1,9 @@
 // src/components/Login.tsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { notifyAuthChange } from "../auth";
+import { notifyAuthChange } from "../auth";  // ✅ already in your code
 
-const API_BASE = import.meta.env.VITE_API_BASE || "";
+const API_BASE = import.meta.env.VITE_API_BASE || ""; // e.g. "http://localhost:5000"
 
 type NormalUser = {
   id: string;
@@ -19,7 +19,7 @@ export default function Login() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [asRunner, setAsRunner] = useState(false);
+  const [asRunner, setAsRunner] = useState(false);          // ✅ toggle state (INSIDE component)
   const navigate = useNavigate();
 
   async function doLogin(e: React.FormEvent) {
@@ -40,22 +40,19 @@ export default function Login() {
 
       if (!res.ok) {
         const ct = res.headers.get("content-type") || "";
-        const payload = ct.includes("application/json")
-          ? await res.json()
-          : await res.text();
+        const payload = ct.includes("application/json") ? await res.json() : await res.text();
         const code = typeof payload === "string" ? payload : payload?.error || "";
         let message = "Login failed. Please try again.";
-        if (code === "Missing credentials")
-          message = "Please enter your email/username and password.";
-        else if (code === "InvalidCredentials")
-          message = "Incorrect email/username or password.";
-        else if (code === "EMAIL_NOT_VERIFIED")
-          message = "Please verify your email before logging in.";
+        if (code === "Missing credentials") message = "Please enter your email/username and password.";
+        else if (code === "InvalidCredentials") message = "Incorrect email/username or password.";
+        else if (code === "EMAIL_NOT_VERIFIED") message = "Please verify your email before logging in.";
         throw new Error(message);
       }
 
+      // Server returns at least: { id, firstName?, lastName? }
       const data = await res.json();
 
+      // Build a normalized user object right away from what we KNOW.
       const isEmail = id.includes("@");
       const immediate: NormalUser = {
         id: data.id,
@@ -66,18 +63,17 @@ export default function Login() {
         lastName: data.lastName || "",
       };
 
+      // Save immediately so the app can react to "authed"
       localStorage.setItem("user_data", JSON.stringify(immediate));
       notifyAuthChange();
 
-      // remember runner mode
+      // ✅ Remember runner mode for this session
       if (asRunner) localStorage.setItem("runner_mode", "1");
       else localStorage.removeItem("runner_mode");
 
-      // optional profile enrichment
+      // Try to ENRICH from /api/profile (may overwrite user_data)
       try {
-        const profRes = await fetch(`${API_BASE}/api/profile`, {
-          credentials: "include",
-        });
+        const profRes = await fetch(`${API_BASE}/api/profile`, { credentials: "include" });
         if (profRes.ok) {
           const prof = await resafeJson(profRes);
           const p = prof?.user || {};
@@ -86,17 +82,17 @@ export default function Login() {
             email: immediate.email || p.Email || p.email || "",
             username: immediate.username || p.Login || p.login || "",
             login: immediate.login || p.Login || p.login || "",
-            firstName:
-              immediate.firstName || p.FirstName || p.firstName || "",
+            firstName: immediate.firstName || p.FirstName || p.firstName || "",
             lastName: immediate.lastName || p.LastName || p.lastName || "",
           };
           localStorage.setItem("user_data", JSON.stringify(merged));
           notifyAuthChange();
         }
       } catch {
-        // ignore enrichment failures
+        // ignore enrichment errors
       }
 
+      // ✅ Redirect depending on toggle
       navigate(asRunner ? "/runner" : "/storefront", { replace: true });
     } catch (e: any) {
       setErr(e?.message || "Login failed");
@@ -137,44 +133,33 @@ export default function Login() {
         />
       </div>
 
-      {/* 👇 Two small text links under the password field */}
-      <div className="form__links-row">
-        <div>
-          <a
-            href="#"
-            className="neon-link"
-            onClick={(e) => {
-              e.preventDefault();
-              navigate("/recover-identity");
-            }}
-          >
-            Forgot username / email?
-          </a>
-        </div>
-        <div>
-          <a
-            href="#"
-            className="neon-link"
-            onClick={(e) => {
-              e.preventDefault();
-              navigate("/forgot-password");
-            }}
-          >
-            Forgot your password?
-          </a>
-        </div>
+            {/* 🔹 NEW: 'Forgot your password?' link under password field */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          marginBottom: "0.5rem",
+        }}
+      >
+        <a
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            navigate("/forgot-password");
+          }}
+          className="neon-link"
+          style={{ fontSize: ".9rem" }}
+        >
+          Forgot your password?
+        </a>
       </div>
 
-      {/* Runner toggle */}
+
+      {/* ✅ Cool runner toggle (uses styles you added in App.css) */}
       <label
         className={`toggle ${asRunner ? "toggle--on" : ""}`}
         htmlFor="loginRunner"
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            setAsRunner((v) => !v);
-          }
-        }}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setAsRunner(v => !v); }}
       >
         <input
           id="loginRunner"
@@ -192,34 +177,21 @@ export default function Login() {
       </label>
 
       {err && (
-        <div
-          style={{
-            color: "#f6b3b3",
-            fontSize: ".9rem",
-            marginBottom: ".5rem",
-          }}
-        >
+        <div style={{ color: "#f6b3b3", fontSize: ".9rem", marginBottom: ".5rem" }}>
           {err}
         </div>
       )}
 
-      <button
-        type="submit"
-        className="btn btn--gold btn--block"
-        disabled={loading}
-      >
+      <button type="submit" className="btn btn--gold btn--block" disabled={loading}>
         {loading ? "Logging in…" : "Login"}
       </button>
     </form>
   );
 }
 
+/** Optional tiny helper so a 204/empty body doesn't throw JSON parse error */
 async function resafeJson(res: Response) {
   const text = await res.text();
   if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(text); } catch { return null; }
 }

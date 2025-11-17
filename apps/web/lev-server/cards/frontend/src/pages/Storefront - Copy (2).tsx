@@ -10,7 +10,7 @@ type Item = {
   description?: string;
   imageUrl: string;
   createdAt?: string;
-  ownerId?: string; // owner for delete / self-checkout block
+  ownerId?: string; // 👈 new
 };
 
 type SortKey = "createdAt" | "name" | "price";
@@ -24,7 +24,7 @@ export default function Storefront() {
   const [sortKey, setSortKey] = React.useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc");
 
-  // who am I? (for delete permissions + blocking self-checkout)
+  // who am I? (for delete permissions)
   const [userId, setUserId] = React.useState<string | null>(null);
 
   // Lightbox state (index into `view`)
@@ -248,12 +248,12 @@ export default function Storefront() {
           <div className="sf-tablewrap" style={{ marginTop: 6 }}>
             <table className="sf-table sf-compact">
               <colgroup>
-                <col style={{ width: 110 }} />       {/* thumb */}
-                <col style={{ width: "24%" }} />     {/* name */}
-                <col style={{ width: "16%" }} />     {/* price */}
-                <col style={{ width: "26%" }} />     {/* description */}
-                <col style={{ width: "18%" }} />     {/* added */}
-                <col style={{ width: 150 }} />       {/* actions (buy + delete / tag) */}
+                <col style={{ width: 110 }} /> {/* thumb */}
+                <col style={{ width: "25%" }} /> {/* name */}
+                <col style={{ width: "20%" }} /> {/* price */}
+                <col style={{ width: "29%" }} /> {/* description */}
+                <col style={{ width: "16%" }} /> {/* added */}
+                <col style={{ width: 110 }} /> {/* actions (buy + delete) */}
               </colgroup>
 
               <thead style={{ display: "table-header-group" }}>
@@ -277,128 +277,113 @@ export default function Storefront() {
               </thead>
 
               <tbody>
-                {view.map((it, i) => {
-                  const isOwner = !!(userId && it.ownerId === userId);
-
-                  return (
-                    <tr
-                      key={it._id}
-                      className="sf-row"
-                      // Double-click opens checkout only if not owner
-                      onDoubleClick={() => {
-                        if (!isOwner) navigate(`/pay/${it._id}`);
-                      }}
-                      // Accessible keyboard activation (Enter)
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !isOwner) {
-                          navigate(`/pay/${it._id}`);
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
-                      title={
-                        isOwner
-                          ? "You own this item"
-                          : "Double-click to open payment"
-                      }
-                    >
-                      <td data-label="Item">
-                        <button
-                          type="button"
-                          className="sf-thumb-btn"
-                          aria-label={`View image: ${it.name || "item"}`}
-                          onClick={(e) => {
+                {view.map((it, i) => (
+                  <tr
+                    key={it._id}
+                    className="sf-row"
+                    // ✅ Double-click opens checkout
+                    onDoubleClick={() => navigate(`/pay/${it._id}`)}
+                    // Accessible keyboard activation (Enter)
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") navigate(`/pay/${it._id}`);
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    title="Double-click to open payment"
+                  >
+                    <td data-label="Item">
+                      <button
+                        type="button"
+                        className="sf-thumb-btn"
+                        aria-label={`View image: ${it.name || "item"}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openLightbox(i);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
                             e.stopPropagation();
                             openLightbox(i);
+                          }
+                        }}
+                      >
+                        <img
+                          src={it.imageUrl}
+                          alt={it.name}
+                          className="sf-thumb"
+                          draggable={false}
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src =
+                              "https://placehold.co/192x144?text=No+Image";
+                          }}
+                        />
+                      </button>
+                    </td>
+
+                    <td data-label="Name" className="sf-name">
+                      {it.name || "—"}
+                    </td>
+
+                    <td data-label="Price" className="sf-price">
+                      {formatPrice(it.price)}
+                    </td>
+
+                    <td data-label="Description">
+                      <span
+                        style={{
+                          display: "block",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          maxWidth: "100%",
+                        }}
+                        title={it.description || ""}
+                      >
+                        {it.description || "—"}
+                      </span>
+                    </td>
+
+                    <td data-label="Added" className="sf-added">
+                      {fmtShort(it.createdAt)}
+                    </td>
+
+                    <td data-label="Actions" className="sf-actions">
+                      {/* ✅ New “Storefront” style checkout button */}
+                      <button
+                        type="button"
+                        className="sf-buy-btn"
+                        title="Open checkout"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/pay/${it._id}`);
+                        }}
+                      >
+                        <span className="sf-buy-btn__glyph">SF</span>
+                      </button>
+
+                      {/* Existing delete (only for owner) */}
+                      {userId && it.ownerId === userId && (
+                        <button
+                          type="button"
+                          className="sf-delete-btn"
+                          title="Delete item"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(it._id);
                           }}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.stopPropagation();
-                              openLightbox(i);
+                              handleDelete(it._id);
                             }
                           }}
                         >
-                          <img
-                            src={it.imageUrl}
-                            alt={it.name}
-                            className="sf-thumb"
-                            draggable={false}
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).src =
-                                "https://placehold.co/192x144?text=No+Image";
-                            }}
-                          />
+                          🗑
                         </button>
-                      </td>
-
-                      <td data-label="Name" className="sf-name">
-                        {it.name || "—"}
-                      </td>
-
-                      <td data-label="Price" className="sf-price">
-                        {formatPrice(it.price)}
-                      </td>
-
-                      <td data-label="Description">
-                        <span
-                          style={{
-                            display: "block",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            maxWidth: "100%",
-                          }}
-                          title={it.description || ""}
-                        >
-                          {it.description || "—"}
-                        </span>
-                      </td>
-
-                      <td data-label="Added" className="sf-added">
-                        {fmtShort(it.createdAt)}
-                      </td>
-
-                     <td data-label="Actions" className="sf-actions">
-  {/* Checkout only for non-owners */}
-  {!isOwner && (
-    <button
-      type="button"
-      className="sf-buy-btn"
-      title="Open checkout"
-      onClick={(e) => {
-        e.stopPropagation();
-        navigate(`/pay/${it._id}`);
-      }}
-    >
-      Checkout
-    </button>
-  )}
-
-  {/* Owner: just show delete, no text */}
-  {isOwner && (
-    <button
-      type="button"
-      className="sf-delete-btn"
-      title="Delete item"
-      onClick={(e) => {
-        e.stopPropagation();
-        handleDelete(it._id);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.stopPropagation();
-          handleDelete(it._id);
-        }
-      }}
-    >
-      🗑
-    </button>
-  )}
-</td>
-
-                    </tr>
-                  );
-                })}
+                      )}
+                    </td>
+                  </tr>
+                ))}
 
                 {loading && items.length === 0 && (
                   <tr>

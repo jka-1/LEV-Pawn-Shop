@@ -52,30 +52,16 @@ function readAuth() {
   }
 }
 
-// --- Runner flag helpers ---
-function isRunnerMode() {
-  return localStorage.getItem("runner_mode") === "1";
-}
-
 export default function NavBar() {
   const navigate = useNavigate();
   const [{ authed, user }, setAuth] = useState(readAuth());
-  const [runnerMode, setRunnerMode] = useState(isRunnerMode());
   const displayName = getDisplayName(user);
 
-  // keep in sync if another tab logs in/out OR runner toggle changes
+  // keep in sync if another tab logs in/out
   useEffect(() => {
-    const updateAuth = () => setAuth(readAuth());
-    const updateRunner = () => setRunnerMode(isRunnerMode());
-
-    // initial sync
-    updateAuth();
-    updateRunner();
-
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === "user_data") updateAuth();
-      if (e.key === "runner_mode") updateRunner();
-    };
+    const update = () => setAuth(readAuth());
+    update();
+    const onStorage = (e: StorageEvent) => { if (e.key === "user_data") update(); };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
@@ -83,49 +69,45 @@ export default function NavBar() {
   const logout = async () => {
     try { await fetch("/api/logout", { method: "POST", credentials: "include" }); } catch {}
     localStorage.removeItem("user_data");
-    localStorage.removeItem("runner_mode"); // clear runner flag on logout
     setAuth({ authed: false, user: null });
-    setRunnerMode(false);
     navigate("/", { replace: true });
   };
 
   return (
     <header className="navbar" role="banner">
       {/* Brand (click to go Home) */}
-      <Link
-        to="/home"
-        className="navbar__brand"
-        aria-label="LEV Home"
-        title="LEV"
-      >
-        <span className="navbar__logo" aria-hidden="true">♔</span>
-        <span className="navbar__title">LEV</span>
-      </Link>
+     {/* Brand (click to go Home) */}
+<Link
+  to="/home"
+  className="navbar__brand"
+  aria-label="QuickPawn Home"
+  title="QuickPawn"
+>
+  <span className="navbar__logo" aria-hidden="true">♔</span>
+  <span className="navbar__title">QuickPawn</span>
+</Link>
+
 
       {/* Center links */}
       <nav className="navbar__links" aria-label="Primary">
         <Link to="/home" className="navbar__link">Home</Link>
         <Link to="/storefront" className="navbar__link">Storefront</Link>
+       {authed && (
+  <Link
+    to="/upload"
+    className="navbar__link"
+    onClick={(e) => {
+      // Belt-and-suspenders: ensure no parent handler or overlay swallows it
+      e.preventDefault();
+      e.stopPropagation();
+      navigate("/upload");
+    }}
+  >
+    Upload
+  </Link>
+)}
 
-        {/* Upload: only when authed AND NOT runner */}
-        {authed && !runnerMode && (
-          <Link
-            to="/upload"
-            className="navbar__link"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              navigate("/upload");
-            }}
-          >
-            Upload
-          </Link>
-        )}
 
-        {/* Runner: only when authed AND runner */}
-        {authed && runnerMode && (
-          <Link to="/runner" className="navbar__link">Runner</Link>
-        )}
       </nav>
 
       {/* Right side */}

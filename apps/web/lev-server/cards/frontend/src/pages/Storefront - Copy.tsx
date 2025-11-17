@@ -1,7 +1,7 @@
 // src/pages/Storefront.tsx
 import React from "react";
 import NavBar from "../components/NavBar";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom"; // ✅ new
 
 type Item = {
   _id: string;
@@ -10,7 +10,6 @@ type Item = {
   description?: string;
   imageUrl: string;
   createdAt?: string;
-  ownerId?: string; // owner for delete / self-checkout block
 };
 
 type SortKey = "createdAt" | "name" | "price";
@@ -24,35 +23,12 @@ export default function Storefront() {
   const [sortKey, setSortKey] = React.useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc");
 
-  // who am I? (for delete permissions + blocking self-checkout)
-  const [userId, setUserId] = React.useState<string | null>(null);
-
   // Lightbox state (index into `view`)
   const [lbIdx, setLbIdx] = React.useState<number | null>(null);
   const openLightbox = (i: number) => setLbIdx(i);
   const closeLightbox = () => setLbIdx(null);
 
-  const navigate = useNavigate();
-
-  // ---- Read current user id from localStorage ----
-  React.useEffect(() => {
-    try {
-      const raw = localStorage.getItem("user_data");
-      if (!raw) return;
-      const u = JSON.parse(raw);
-      const id =
-        u?.id ??
-        u?._id ??
-        u?.userId ??
-        u?.UserId ??
-        u?.ID;
-      if (id && typeof id === "string") {
-        setUserId(id);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
+  const navigate = useNavigate(); // ✅ new
 
   // ---- Fetch all items (server handles pagination via nextCursor) ----
   async function fetchAllPages() {
@@ -135,10 +111,8 @@ export default function Storefront() {
     if (lbIdx === null) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeLightbox();
-      if (e.key === "ArrowRight")
-        setLbIdx((i) => (i === null ? i : (i + 1) % view.length));
-      if (e.key === "ArrowLeft")
-        setLbIdx((i) => (i === null ? i : (i - 1 + view.length) % view.length));
+      if (e.key === "ArrowRight") setLbIdx((i) => (i === null ? i : (i + 1) % view.length));
+      if (e.key === "ArrowLeft") setLbIdx((i) => (i === null ? i : (i - 1 + view.length) % view.length));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -169,29 +143,6 @@ export default function Storefront() {
     });
   }
 
-  // ---- Delete handler ----
-  async function handleDelete(id: string) {
-    const confirm = window.confirm(
-      "Are you sure you want to delete this item? This cannot be undone."
-    );
-    if (!confirm) return;
-
-    try {
-      const res = await fetch(`/api/storefront/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || `Delete failed (HTTP ${res.status})`);
-      }
-      // remove from UI
-      setItems((prev) => prev.filter((it) => it._id !== id));
-    } catch (e: any) {
-      alert(e?.message || "Error deleting item");
-    }
-  }
-
   return (
     <div className="sf-neon page--storefront">
       <NavBar />
@@ -206,9 +157,7 @@ export default function Storefront() {
           >
             <h1 className="sf-title">Storefront</h1>
             <div className="sf-controls">
-              <label htmlFor="sf-search" className="sr-only">
-                Search items
-              </label>
+              <label htmlFor="sf-search" className="sr-only">Search items</label>
               <input
                 id="sf-search"
                 value={q}
@@ -217,16 +166,12 @@ export default function Storefront() {
                 className="input sf-input"
                 autoComplete="off"
               />
-              <label htmlFor="sf-sort" className="sr-only">
-                Sort by
-              </label>
+              <label htmlFor="sf-sort" className="sr-only">Sort by</label>
               <select
                 id="sf-sort"
                 value={`${sortKey}:${sortDir}`}
                 onChange={(e) => {
-                  const [k, d] = e.target.value.split(
-                    ":"
-                  ) as [SortKey, "asc" | "desc"];
+                  const [k, d] = e.target.value.split(":") as [SortKey, "asc" | "desc"];
                   setSortKey(k);
                   setSortDir(d);
                 }}
@@ -248,170 +193,96 @@ export default function Storefront() {
           <div className="sf-tablewrap" style={{ marginTop: 6 }}>
             <table className="sf-table sf-compact">
               <colgroup>
-                <col style={{ width: 110 }} />       {/* thumb */}
-                <col style={{ width: "24%" }} />     {/* name */}
-                <col style={{ width: "16%" }} />     {/* price */}
-                <col style={{ width: "26%" }} />     {/* description */}
-                <col style={{ width: "18%" }} />     {/* added */}
-                <col style={{ width: 150 }} />       {/* actions (buy + delete / tag) */}
+                <col style={{ width: 110 }} />        {/* thumb */}
+                <col style={{ width: "25%" }} />      {/* name */}
+                <col style={{ width: "20%" }} />      {/* price */}
+                <col style={{ width: "29%" }} />      {/* description */}
+                <col style={{ width: "16%" }} />      {/* added */}
               </colgroup>
 
               <thead style={{ display: "table-header-group" }}>
                 <tr>
                   <Th label="Item" />
                   <Th label="Name" clickable onClick={() => flipSort("name")} />
-                  <Th
-                    label="Price"
-                    right
-                    clickable
-                    onClick={() => flipSort("price")}
-                  />
+                  <Th label="Price" right clickable onClick={() => flipSort("price")} />
                   <Th label="Description" />
-                  <Th
-                    label="Added"
-                    clickable
-                    onClick={() => flipSort("createdAt")}
-                  />
-                  <Th label="" right />
+                  <Th label="Added" clickable onClick={() => flipSort("createdAt")} />
                 </tr>
               </thead>
 
               <tbody>
-                {view.map((it, i) => {
-                  const isOwner = !!(userId && it.ownerId === userId);
-
-                  return (
-                    <tr
-                      key={it._id}
-                      className="sf-row"
-                      // Double-click opens checkout only if not owner
-                      onDoubleClick={() => {
-                        if (!isOwner) navigate(`/pay/${it._id}`);
-                      }}
-                      // Accessible keyboard activation (Enter)
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !isOwner) {
-                          navigate(`/pay/${it._id}`);
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
-                      title={
-                        isOwner
-                          ? "You own this item"
-                          : "Double-click to open payment"
-                      }
-                    >
-                      <td data-label="Item">
-                        <button
-                          type="button"
-                          className="sf-thumb-btn"
-                          aria-label={`View image: ${it.name || "item"}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openLightbox(i);
+                {view.map((it, i) => (
+                  <tr
+                    key={it._id}
+                    className="sf-row"
+                    // ✅ Double-click opens payment placeholder
+                    onDoubleClick={() => navigate(`/pay/${it._id}`)}
+                    // Accessible keyboard activation (Enter)
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") navigate(`/pay/${it._id}`);
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    title="Double-click to open payment"
+                  >
+                    <td data-label="Item">
+                      <button
+                        type="button"
+                        className="sf-thumb-btn"
+                        aria-label={`View image: ${it.name || "item"}`}
+                        onClick={() => openLightbox(i)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") openLightbox(i);
+                        }}
+                      >
+                        <img
+                          src={it.imageUrl}
+                          alt={it.name}
+                          className="sf-thumb"
+                          draggable={false}
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src =
+                              "https://placehold.co/192x144?text=No+Image";
                           }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.stopPropagation();
-                              openLightbox(i);
-                            }
-                          }}
-                        >
-                          <img
-                            src={it.imageUrl}
-                            alt={it.name}
-                            className="sf-thumb"
-                            draggable={false}
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).src =
-                                "https://placehold.co/192x144?text=No+Image";
-                            }}
-                          />
-                        </button>
-                      </td>
+                        />
+                      </button>
+                    </td>
 
-                      <td data-label="Name" className="sf-name">
-                        {it.name || "—"}
-                      </td>
+                    <td data-label="Name" className="sf-name">{it.name || "—"}</td>
 
-                      <td data-label="Price" className="sf-price">
-                        {formatPrice(it.price)}
-                      </td>
+                    <td data-label="Price" className="sf-price">
+                      {formatPrice(it.price)}
+                    </td>
 
-                      <td data-label="Description">
-                        <span
-                          style={{
-                            display: "block",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            maxWidth: "100%",
-                          }}
-                          title={it.description || ""}
-                        >
-                          {it.description || "—"}
-                        </span>
-                      </td>
+                    <td data-label="Description">
+                      <span
+                        style={{
+                          display: "block",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          maxWidth: "100%",
+                        }}
+                        title={it.description || ""}
+                      >
+                        {it.description || "—"}
+                      </span>
+                    </td>
 
-                      <td data-label="Added" className="sf-added">
-                        {fmtShort(it.createdAt)}
-                      </td>
-
-                     <td data-label="Actions" className="sf-actions">
-  {/* Checkout only for non-owners */}
-  {!isOwner && (
-    <button
-      type="button"
-      className="sf-buy-btn"
-      title="Open checkout"
-      onClick={(e) => {
-        e.stopPropagation();
-        navigate(`/pay/${it._id}`);
-      }}
-    >
-      Checkout
-    </button>
-  )}
-
-  {/* Owner: just show delete, no text */}
-  {isOwner && (
-    <button
-      type="button"
-      className="sf-delete-btn"
-      title="Delete item"
-      onClick={(e) => {
-        e.stopPropagation();
-        handleDelete(it._id);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.stopPropagation();
-          handleDelete(it._id);
-        }
-      }}
-    >
-      🗑
-    </button>
-  )}
-</td>
-
-                    </tr>
-                  );
-                })}
+                    <td data-label="Added" className="sf-added">
+                      {fmtShort(it.createdAt)}
+                    </td>
+                  </tr>
+                ))}
 
                 {loading && items.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="sf-empty">
-                      Loading items…
-                    </td>
+                    <td colSpan={5} className="sf-empty">Loading items…</td>
                   </tr>
                 )}
                 {!loading && view.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="sf-empty">
-                      No items found.
-                    </td>
+                    <td colSpan={5} className="sf-empty">No items found.</td>
                   </tr>
                 )}
               </tbody>
@@ -431,21 +302,11 @@ export default function Storefront() {
           tabIndex={-1}
         >
           <div className="lb__pane" onClick={(e) => e.stopPropagation()}>
-            <button
-              className="lb__btn lb__close"
-              aria-label="Close"
-              onClick={closeLightbox}
-            >
-              ×
-            </button>
+            <button className="lb__btn lb__close" aria-label="Close" onClick={closeLightbox}>×</button>
             <button
               className="lb__btn lb__prev"
               aria-label="Previous image"
-              onClick={() =>
-                setLbIdx((i) =>
-                  i === null ? i : (i - 1 + view.length) % view.length
-                )
-              }
+              onClick={() => setLbIdx((i) => (i === null ? i : (i - 1 + view.length) % view.length))}
             >
               ‹
             </button>
@@ -463,11 +324,7 @@ export default function Storefront() {
             <button
               className="lb__btn lb__next"
               aria-label="Next image"
-              onClick={() =>
-                setLbIdx((i) =>
-                  i === null ? i : (i + 1) % view.length
-                )
-              }
+              onClick={() => setLbIdx((i) => (i === null ? i : (i + 1) % view.length))}
             >
               ›
             </button>
@@ -478,12 +335,7 @@ export default function Storefront() {
                 {formatPrice(current.price)}
                 {current.description ? <> · {current.description}</> : null}
                 {" · "}
-                <a
-                  href={current.imageUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="lb__link"
-                >
+                <a href={current.imageUrl} target="_blank" rel="noopener noreferrer" className="lb__link">
                   Open full image
                 </a>
               </div>
