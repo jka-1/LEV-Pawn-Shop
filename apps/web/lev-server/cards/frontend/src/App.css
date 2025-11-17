@@ -30,13 +30,37 @@ header.navbar{
   display:flex;align-items:center;justify-content:space-between;gap:1rem;
   padding:.6rem 1rem; min-height:var(--nav-h);
 }
-.navbar__brand{display:inline-flex;align-items:center;gap:.5rem;cursor:pointer;user-select:none;}
+.navbar__brand{
+  display:inline-flex;
+  align-items:center;
+  gap:.5rem;
+  cursor:pointer;
+  user-select:none;
+  text-decoration: none;      /* ✅ removes underline */
+}
+
+.navbar__brand:hover,
+.navbar__brand:focus{
+  text-decoration: none;      /* ✅ keep it off on hover/focus */
+}
+
 .navbar__logo{color:#f4d9a2;font-size:1.1rem;line-height:1;}
 .navbar__title{
   background:linear-gradient(90deg,#fff 0%,#f4d9a2 55%,#d4a15d 100%);
   -webkit-background-clip:text;background-clip:text;color:transparent;font-weight:800;
 }
-.navbar__links{display:inline-flex;align-items:center;gap:.25rem;flex-wrap:wrap;}
+/* Center the main nav links in the bar */
+.navbar__links{
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+
 .navbar__link{color:#e5e7eb;text-decoration:none;padding:.35rem .6rem;border-radius:.375rem;}
 .navbar__link:hover,.navbar__link:focus{color:#0b0f14;background:#f4d9a2;outline:none;}
 .navbar__user{display:inline-flex;align-items:center;gap:.5rem;flex-wrap:wrap;}
@@ -459,13 +483,14 @@ input[type="submit"]:hover{
 
 /* Center stack: brand text above card */
 .neon-stack{
-  position:absolute; inset:0;
-  display:flex; flex-direction:column;
-  align-items:center; justify-content:center;
-  gap: 22px;               /* space between text block and card */
-  z-index:3;               /* above background washes */
-  padding: 24px 16px;
-  text-align:center;
+  position: relative; 
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:flex-start;
+  padding-top: calc(var(--nav-h) + 6px);
+  gap: 28px;
+  padding-inline: 16px;   /* optional: keeps it nice on mobile */
 }
 
 /* Reuse your existing hero styles but center them in the stack */
@@ -841,7 +866,7 @@ input[type="submit"]:hover{
 /* Storefront: compact centered layout */
 .page--storefront .sf-toolbar,
 .page--storefront .sf-table{
-  width: min(1000px, 96vw);
+  width: min(1100px, 96vw);
   margin: 0 auto;
   border-radius: 12px;
   table-layout: fixed;        /* important: makes col widths stick */
@@ -908,6 +933,11 @@ input[type="submit"]:hover{
   text-overflow: ellipsis;
   white-space: nowrap;
   border-top: 1px solid #1f2937;
+}
+
+/* Allow the checkout button column to show fully */
+.page--storefront .sf-table tbody td.sf-actions {
+  overflow: visible !important;
 }
 
 /* Header styling */
@@ -1337,3 +1367,365 @@ header.navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; }
   background: transparent !important;
   box-shadow: none !important;
 }
+
+/* ---- Runner toggle ---- */
+.toggle {
+  --w: 54px; --h: 30px; --p: 3px;
+  display:inline-flex; align-items:center; gap:.6rem; cursor:pointer;
+  user-select:none;
+}
+.toggle__track {
+  width:var(--w); height:var(--h); border-radius:999px;
+  background:#e5e7eb; position:relative; transition:background .18s ease;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.06);
+}
+.toggle__thumb {
+  position:absolute; top:var(--p); left:var(--p);
+  width:calc(var(--h) - var(--p)*2); height:calc(var(--h) - var(--p)*2);
+  border-radius:50%; background:#fff; box-shadow:0 2px 6px rgba(0,0,0,.25);
+  transition: transform .18s ease;
+  will-change: transform;
+}
+.toggle__label {
+  font: 500 14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color:#0f172a;
+}
+.toggle--on .toggle__track { background:#22c55e; }   /* green when ON */
+.toggle--on .toggle__thumb { transform: translateX(calc(var(--w) - var(--h))); }
+
+
+/* Make the "Login as Runner" text gold on dark backgrounds */
+.toggle .toggle__label {
+  color: var(--gold-2) !important;      /* base gold */
+  font-weight: 700;
+  letter-spacing: .15px;
+}
+
+/* a bit brighter when the toggle is ON */
+.toggle--on .toggle__label {
+  color: var(--gold-3) !important;
+  text-shadow: 0 0 8px rgba(241, 194, 120, .25);
+}
+
+/* Gold gradient text utility (matches navbar brand) */
+.highlight{
+  background: linear-gradient(90deg, #fff 0%, var(--gold-2) 55%, var(--gold-1) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 900;
+  letter-spacing: -.01em;
+}
+
+/* Ensure the card heading uses the highlight nicely */
+.auth-card__title{
+  margin: 2px 0 12px;
+  text-align: left;           /* or center if you prefer */
+  font-size: 22px;
+  font-weight: 800;
+}
+
+/* === Let Home / Register pages scroll normally =================== */
+
+/* Override the overflow from .login-neon so these pages can scroll */
+.home-neon,
+.auth-neon {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: calc(100vh - var(--nav-h));
+}
+
+/* Put the stacks back into normal document flow */
+.home-stack,
+.auth-stack {
+  position: relative;
+  inset: auto;
+}
+
+/* Small helper row under password field on login */
+.form__links-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin:-4px 0 10px;
+  font-size:0.85rem;
+}
+
+.form__links{
+  display:flex;
+  gap:.75rem;
+  justify-content:flex-end;
+  align-items:center;
+}
+
+.link-button{
+  border:none;
+  background:none;
+  padding:0;
+  margin:0;
+  font:500 0.85rem system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  color:var(--gold-3);
+  cursor:pointer;
+}
+
+.link-button:hover{
+  color:var(--gold-2);
+  text-decoration:underline;
+}
+
+.form__divider{
+  color:#6b7280;
+}
+
+/* Tiny messages on recovery forms */
+.form__error{
+  margin-bottom:.75rem;
+  padding:.45rem .75rem;
+  border-radius:.6rem;
+  font-size:.85rem;
+  background:rgba(220,38,38,.08);
+  color:#fecaca;
+}
+
+.form__success{
+  margin-bottom:.75rem;
+  padding:.45rem .75rem;
+  border-radius:.6rem;
+  font-size:.85rem;
+  background:rgba(16,185,129,.08);
+  color:#a7f3d0;
+}
+
+/* =========================
+   Runner Dashboard
+   ========================= */
+
+.page--runner {
+  min-height: 100vh;
+  background: #050608;
+  color: #f9fafb;
+  padding-top: var(--nav-h);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.runner-main {
+  width: 100%;
+  max-width: 480px;
+  padding: 1.5rem 1.25rem 3rem;
+}
+
+.runner-header {
+  margin-top: 0.5rem;
+}
+
+.runner-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.runner-subtitle {
+  margin-top: 0.25rem;
+  font-size: 0.9rem;
+  color: #9ca3af;
+}
+
+/* Card */
+
+.runner-tools-card {
+  margin-top: 1.5rem;
+  margin-bottom: 2rem;
+  padding: 1.25rem 1.25rem 1.5rem;
+  background: #111827;
+  border-radius: 24px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7);
+}
+
+.runner-tools-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.9rem;
+}
+
+.runner-tools-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.runner-tools-dot {
+  font-size: 1.3rem;
+  color: #6b7280;
+}
+
+.runner-tools-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.runner-tool-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 0.7rem 0;
+  gap: 0.75rem;
+}
+
+.runner-tool-row + .runner-tool-row {
+  border-top: 1px solid rgba(55, 65, 81, 0.7);
+}
+
+.runner-tool-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(249, 250, 251, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+}
+
+.runner-tool-text {
+  flex: 1;
+}
+
+.runner-tool-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.runner-tool-desc {
+  font-size: 0.8rem;
+  margin-top: 0.15rem;
+  color: #9ca3af;
+}
+
+/* Buttons */
+
+.runner-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.runner-btn {
+  width: 100%;
+  border: none;
+  outline: none;
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+  font-size: 0.98rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, var(--gold-2), var(--gold-3));
+  color: #111827;
+  cursor: pointer;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
+}
+
+.runner-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.7);
+}
+
+.runner-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.7);
+}
+
+.runner-btn-icon {
+  font-size: 1.1rem;
+}
+
+/* Footer */
+
+.runner-footer {
+  margin-top: 1.75rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+
+/* === Storefront actions: Buy + Delete =========================== */
+
+.sf-actions {
+  display: flex;
+  justify-content: flex-end;   /* align buttons to the right */
+  align-items: center;
+  gap: 0.45rem;                /* space between buy + delete */
+}
+
+/* Checkout button – clean gold pill */
+.sf-buy-btn {
+  border: none;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+
+  background: linear-gradient(135deg, var(--gold-2), var(--gold-3));
+  color: #111827;
+
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+
+  min-width: 100px;
+  cursor: pointer;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  box-shadow: 0 10px 24px rgba(212, 161, 93, 0.45);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+
+.sf-buy-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow: 0 14px 30px rgba(212, 161, 93, 0.55);
+}
+
+.sf-buy-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 8px 16px rgba(212, 161, 93, 0.4);
+}
+
+
+
+
+/* Delete icon – same look as before, just works inside flex row */
+.sf-delete-btn {
+  inline-size: 32px;
+  block-size: 32px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  background: radial-gradient(circle at 30% 30%, #fecaca, #b91c1c);
+  border: 1px solid rgba(248, 113, 113, 0.8);
+  box-shadow: 0 4px 12px rgba(248, 113, 113, 0.5);
+
+  color: #111;          /* trash emoji color */
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.sf-delete-btn:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+
+
+
