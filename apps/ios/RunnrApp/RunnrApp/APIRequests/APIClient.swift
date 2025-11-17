@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreLocation
 
 // MARK: - Storefront create models
 
@@ -79,6 +80,7 @@ struct StorefrontListResponse: Decodable {
     let nextCursor: String?
 }
 
+
 // MARK: - Auth Models
 
 /// Request body for POST /api/register
@@ -106,10 +108,10 @@ struct LoginPayload: Encodable {
 struct AuthUser: Decodable {
     let id: String
     let email: String
-    let username: String
-    let login: String
-    let firstName: String
-    let lastName: String
+    let username: String?
+    let login: String?
+    let firstName: String?
+    let lastName: String?
 }
 
 // MARK: - Email verification & password reset models
@@ -483,6 +485,51 @@ final class StorefrontAPI {
         let decoded = try JSONDecoder().decode(RegisterResponse.self, from: data)
         return decoded.id
     }
+    
+    // MARK: - Runner Meetup
+    func getRunnerMeetup(runnerId: String) async throws -> MeetupPoint {
+        // Construct URL: assuming your endpoint is /api/runners/{id}/meetup
+        guard let url = URL(string: "/api/runners/\(runnerId)/meetup", relativeTo: baseURL) else {
+            throw StorefrontAPIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let (data, response) = try await urlSession.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw StorefrontAPIError.httpStatus(-1)
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            throw StorefrontAPIError.httpStatus(http.statusCode)
+        }
+
+        // Decode response into MeetupPointResponse
+        let decoded = try JSONDecoder().decode(MeetupPointResponse.self, from: data)
+
+        // Convert to MeetupPoint (with CLLocationCoordinate2D)
+        guard let latitude = decoded.latitude,
+              let longitude = decoded.longitude else {
+            throw StorefrontAPIError.invalidURL
+        }
+
+        let meetup = MeetupPoint(
+            name: decoded.name,
+            coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        )
+
+        return meetup
+    }
+
+    struct MeetupPointResponse: Decodable {
+        let name: String
+        let latitude: Double?
+        let longitude: Double?
+    }
+
     // MARK: - Runner Registration (async)
     func registerRunner(
         name: String,
@@ -617,6 +664,37 @@ final class StorefrontAPI {
 
         //return try JSONDecoder().decode([Assignment].self, from: data)
     }
+    
+    // MARK: - Runner Login
+    func loginRunner(email: String, password: String) async throws -> String {
+        guard let url = URL(string: "/api/runner/login", relativeTo: baseURL) else {
+            throw StorefrontAPIError.invalidURL
+        }
+
+        let payload = [
+            "email": email,
+            "password": password
+        ]
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, response) = try await urlSession.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw StorefrontAPIError.httpStatus(-1)
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            throw StorefrontAPIError.httpStatus(http.statusCode)
+        }
+
+        let decoded = try JSONDecoder().decode(LoginResponse.self, from: data)
+        return decoded.id // JWT token or runner ID
+    }
+
 
 
     // MARK: - Auth (login)

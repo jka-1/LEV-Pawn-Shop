@@ -40,29 +40,42 @@ struct HomeView: View {
                         VStack(spacing: 22) {
                             SectionHeader(title: "Runner Tools", gold: gold)
 
-                            FeatureRow(
-                                icon: "map.fill",
-                                label: "Start Live Navigation",
-                                description: "Track your route and send location updates."
-                            )
+                            NavigationLink {
+                                RunnerProfileView()
+                            } label: {
+                                FeatureRow(
+                                    icon: "person.crop.circle.fill",
+                                    label: "Runner Profile",
+                                    description: "View and edit your profile information."
+                                )
+                            }
 
-                            FeatureRow(
-                                icon: "shippingbox.fill",
-                                label: "Pickup Workflow",
-                                description: "View pickup instructions for current orders."
-                            )
+                            NavigationLink {
+                                PickupWorkflowView()
+                            } label: {
+                                FeatureRow(
+                                    icon: "shippingbox.fill",
+                                    label: "Pickup Workflow",
+                                    description: "View instructions for current packages."
+                                )
+                            }
 
-                            FeatureRow(
-                                icon: "checkmark.shield.fill",
-                                label: "Item Verification",
-                                description: "Confirm authenticity and validate items."
-                            )
+                            NavigationLink {
+                                ChatView()
+                            } label: {
+                                FeatureRow(
+                                    icon: "bubble.left.and.bubble.right.fill",
+                                    label: "Communication with Client",
+                                    description: "Send and receive messages with buyers."
+                                )
+                            }
                         }
                         .padding(20)
                         .background(cardDark)
                         .cornerRadius(22)
                         .shadow(color: .black.opacity(0.7), radius: 10, y: 3)
                         .padding(.horizontal)
+
 
                         // MARK: - Buttons
                         VStack(spacing: 18) {
@@ -78,7 +91,7 @@ struct HomeView: View {
                             }
 
                             NavigationLink {
-                                RunnerMapView()   // Replace later with meetup screen
+                                MeetupScreen()   // works now
                             } label: {
                                 GoldButtonContent(
                                     title: "Navigate to Meetup",
@@ -88,7 +101,7 @@ struct HomeView: View {
                             }
 
                             NavigationLink {
-                                AssignmentsView() // placeholder
+                                AssignmentsView() // works now
                             } label: {
                                 GoldButtonContent(
                                     title: "View Assignments",

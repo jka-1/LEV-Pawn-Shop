@@ -27,7 +27,15 @@ class RunnerAuthState: ObservableObject {
 
         Task {
             do {
-                let user = try await api.login(loginOrEmail: email, password: password)
+                let response = try await api.loginRunner(email: email, password: password)
+                let user = AuthUser(
+                    id: response,
+                    email: email,
+                    username: nil,
+                    login: nil,
+                    firstName: nil,
+                    lastName: nil
+                    )
 
                 DispatchQueue.main.async {
                     self.currentUser = user
