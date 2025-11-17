@@ -1,0 +1,53 @@
+name: Generate Swift UML (SwiftPlantUML)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  swiftplantuml:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Homebrew (ensure brew is usable)
+        run: |
+          if ! command -v brew; then
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
+          fi
+
+          # Detect Homebrew location
+          if [ -d "/opt/homebrew/bin" ]; then
+            echo "HOMEBREW_PREFIX=/opt/homebrew" >> $GITHUB_ENV
+          elif [ -d "/usr/local/bin" ]; then
+            echo "HOMEBREW_PREFIX=/usr/local" >> $GITHUB_ENV
+          fi
+
+          echo "$HOMEBREW_PREFIX/bin" >> $GITHUB_PATH
+
+      - name: Install SwiftPlantUML
+        run: |
+          brew update
+          brew install swiftplantuml
+
+      - name: Install Java + PlantUML
+        run: |
+          brew install --cask temurin
+          curl -L -o plantuml.jar https://downloads.sourceforge.net/project/plantuml/plantuml.jar
+
+      - name: Generate PlantUML script (.puml)
+        run: |
+          swiftplantuml classdiagram ./ --output consoleOnly > diagram.puml
+
+      - name: Render PNG
+        run: |
+          java -jar plantuml.jar -tpng diagram.puml -o output
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: swiftplantuml-diagrams
+          path: |
+            diagram.puml
+            output/*.png
