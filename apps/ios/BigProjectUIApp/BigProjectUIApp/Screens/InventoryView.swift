@@ -1,16 +1,18 @@
-//
-//  InventoryView.swift
-//  BigProjectUIApp
-//
-//  Created by Matthew Pearaylall on 11/14/25.
-//
-
 import SwiftUI
 import SwiftData
 
 struct InventoryView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Item.dateAdded, order: .reverse) var items: [Item]
+
+    // 3-column grid, like Browse
+    private let columns: [GridItem] = Array(
+        repeating: GridItem(.flexible(), spacing: 12),
+        count: 3
+    )
+
+    // Fixed height for all image areas
+    private let imageHeight: CGFloat = 110
 
     var body: some View {
         ZStack {
@@ -26,14 +28,9 @@ struct InventoryView: View {
                     Spacer()
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 16) {
+                        LazyVGrid(columns: columns, spacing: 16) {
                             ForEach(items) { item in
-                                NavigationLink {
-                                    ItemDetailView(item: item)
-                                } label: {
-                                    itemCard(item)
-                                }
-                                .buttonStyle(.plain)
+                                itemCell(item)
                             }
                         }
                         .padding(.horizontal)
@@ -58,65 +55,64 @@ struct InventoryView: View {
         .padding(.horizontal)
     }
 
-    // MARK: - Card
+    // MARK: - Grid cell
 
-    private func itemCard(_ item: Item) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Image from SwiftData
-            if let data = item.imageData, let uiImage = UIImage(data: data) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(height: 160)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-            } else {
-                ZstackPlaceholder(for: item)
-                    .frame(height: 160)
-            }
+    private func itemCell(_ item: Item) -> some View {
+        VStack(spacing: 6) {
 
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
+            // Tap image/card -> ItemDetailView
+            NavigationLink {
+                ItemDetailView(item: item)
+            } label: {
+                VStack(spacing: 6) {
+                    // --- UNIFORM IMAGE AREA, NO VERTICAL STRETCH ---
+                    Group {
+                        if let data = item.imageData,
+                           let uiImage = UIImage(data: data) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFit()        // ✅ keep aspect ratio, no stretch
+                        } else {
+                            ZstackPlaceholder(for: item)
+                                .scaledToFit()
+                        }
+                    }
+                    .frame(height: imageHeight)       // same height for all cells
+                    .frame(maxWidth: .infinity)
+                    .background(Color.black.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipped()                        // nothing can overflow
+
                     Text(item.name)
-                        .font(.headline)
+                        .font(.caption)
                         .foregroundStyle(.white)
+                        .lineLimit(1)
 
-                    Text("Condition: \(item.condition)")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.8))
-
-                    Text("Category: \(item.category)")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.8))
+                    Text("\(item.price as NSDecimalNumber, formatter: currencyFormatter)")
+                        .font(.caption2.bold())
+                        .foregroundStyle(PawnTheme.gold)
                 }
-
-                Spacer()
-
-                Text("\(item.price as NSDecimalNumber, formatter: currencyFormatter)")
-                    .font(.headline)
-                    .foregroundStyle(PawnTheme.gold)
             }
+            .buttonStyle(.plain)
 
-            HStack {
-                Button {
-                    item.isInCart.toggle()
-                } label: {
-                    Label(
-                        item.isInCart ? "Remove from Cart" : "Add to Cart",
-                        systemImage: item.isInCart ? "cart.badge.minus" : "cart.badge.plus"
-                    )
-                    .foregroundStyle(.black)
-                }
-                .buttonStyle(PawnButtonStyle())
-
-                Spacer()
+            // Add / Remove from cart (same logic as before)
+            Button {
+                item.isInCart.toggle()
+            } label: {
+                Label(
+                    item.isInCart ? "Remove" : "Add",
+                    systemImage: item.isInCart ? "cart.badge.minus" : "cart.badge.plus"
+                )
+                .font(.caption)
+                .foregroundStyle(.black)
             }
+            .buttonStyle(PawnButtonStyle())
         }
-        .padding()
+        .padding(8)
         .background(
-            RoundedRectangle(cornerRadius: 18)
+            RoundedRectangle(cornerRadius: 14)
                 .fill(Color.black.opacity(0.75))
-                .shadow(radius: 6)
+                .shadow(radius: 4)
         )
     }
 
@@ -124,8 +120,8 @@ struct InventoryView: View {
 
     private func ZstackPlaceholder(for item: Item) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.black.opacity(0.5))
+            Rectangle()
+                .fill(Color.clear)
 
             Text(item.name.prefix(1))
                 .font(.largeTitle.bold())

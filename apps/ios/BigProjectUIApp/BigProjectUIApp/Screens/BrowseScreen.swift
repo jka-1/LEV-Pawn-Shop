@@ -3,7 +3,7 @@
 //  BigProjectUIApp
 //
 //  Remote storefront inventory from /api/storefront
-//  Layout matches InventoryView style
+//  Grid layout, infinite scroll
 //
 
 import SwiftUI
@@ -69,6 +69,7 @@ final class BrowseViewModel: ObservableObject {
             return true
         } catch {
             errorMessage = "Failed to delete item: \(error.localizedDescription)"
+            print("❌ Delete error:", error)
             return false
         }
     }
@@ -77,12 +78,22 @@ final class BrowseViewModel: ObservableObject {
 // MARK: - BrowseScreen
 
 struct BrowseScreen: View {
-    @Environment(\.modelContext) private var context   // so we can create SwiftData cart Items
+    @Environment(\.modelContext) private var context   // SwiftData cart Items
     @StateObject private var viewModel = BrowseViewModel()
+
+    // 3-column grid
+    private let columns: [GridItem] = Array(
+        repeating: GridItem(.flexible(), spacing: 12),
+        count: 3
+    )
 
     // Alert state for successful deletion
     @State private var showDeleteSuccess = false
     @State private var deletedItemName: String = ""
+
+    // Confirmation state BEFORE deleting
+    @State private var pendingDeleteItem: StorefrontListItem? = nil
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         ZStack {
@@ -105,10 +116,34 @@ struct BrowseScreen: View {
         .onAppear {
             viewModel.loadInitial()
         }
+        // Shown AFTER a successful delete from server + local list
         .alert("Item deleted", isPresented: $showDeleteSuccess) {
             Button("OK", role: .cancel) { }
         } message: {
             Text("\"\(deletedItemName)\" was successfully deleted.")
+        }
+        // Confirmation BEFORE calling delete on the server
+        .confirmationDialog(
+            "Delete this item?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                Task {
+                    if let item = pendingDeleteItem {
+                        let success = await viewModel.deleteItem(item)
+                        if success {
+                            deletedItemName = item.name
+                            showDeleteSuccess = true
+                        }
+                    }
+                    pendingDeleteItem = nil
+                }
+            }
+
+            Button("Cancel", role: .cancel) {
+                pendingDeleteItem = nil
+            }
         }
     }
 
@@ -142,29 +177,24 @@ struct BrowseScreen: View {
             Spacer()
         } else {
             ScrollView {
-                LazyVStack(spacing: 16) {
+                LazyVGrid(columns: columns, spacing: 16) {
                     ForEach(viewModel.items) { item in
-                        NavigationLink {
-                            StorefrontItemDetailView(item: item) {
-                                addToCart(from: item)
+                        itemCell(item)
+                            .onAppear {
+                                viewModel.loadMoreIfNeeded(currentItem: item)
                             }
-                        } label: {
-                            itemCard(item)
-                        }
-                        .buttonStyle(.plain)
-                        .onAppear {
-                            viewModel.loadMoreIfNeeded(currentItem: item)
-                        }
                     }
 
                     if viewModel.isLoading {
                         ProgressView()
                             .padding(.vertical, 16)
+                            .gridCellColumns(3)
                     } else if viewModel.reachedEnd {
                         Text("You've reached the end.")
                             .font(.footnote)
                             .foregroundStyle(.white.opacity(0.5))
                             .padding(.vertical, 12)
+                            .gridCellColumns(3)
                     }
                 }
                 .padding(.horizontal)
@@ -173,18 +203,73 @@ struct BrowseScreen: View {
         }
     }
 
-    // MARK: - Card (matches InventoryView style)
+    // MARK: - Grid cell
 
-    private func itemCard(_ item: StorefrontListItem) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Big image from server imageUrl
+    private func itemCell(_ item: StorefrontListItem) -> some View {
+        VStack(spacing: 6) {
+
+            // Tap image -> detail screen
+            NavigationLink {
+                StorefrontItemDetailView(item: item) {
+                    addToCart(from: item)
+                }
+            } label: {
+                storefrontImage(for: item)
+                    .frame(height: 110)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+
+            Text(item.name)
+                .font(.caption)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+
+            Text(String(format: "$%.2f", item.price))
+                .font(.caption2.bold())
+                .foregroundStyle(PawnTheme.gold)
+
+            HStack(spacing: 8) {
+                // ADD TO CART
+                Button {
+                    addToCart(from: item)
+                } label: {
+                    Image(systemName: "cart.badge.plus")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(PawnTheme.gold)
+                .foregroundStyle(.black)
+                .font(.caption)
+
+                // DELETE (opens confirmation dialog)
+                Button(role: .destructive) {
+                    pendingDeleteItem = item
+                    showDeleteConfirm = true
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.bordered)
+                .font(.caption)
+            }
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.black.opacity(0.75))
+        )
+    }
+
+    // MARK: - Image / placeholder
+
+    private func storefrontImage(for item: StorefrontListItem) -> some View {
+        Group {
             if let urlString = item.imageUrl,
                let url = URL(string: urlString) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
                         ZStack {
-                            RoundedRectangle(cornerRadius: 16)
+                            RoundedRectangle(cornerRadius: 12)
                                 .fill(Color.black.opacity(0.4))
                             ProgressView()
                                 .tint(PawnTheme.gold)
@@ -193,83 +278,25 @@ struct BrowseScreen: View {
                         image
                             .resizable()
                             .scaledToFill()
-                            .frame(height: 160)
-                            .clipped()
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
                     case .failure:
                         placeholderImage(for: item)
-                            .frame(height: 160)
                     @unknown default:
                         placeholderImage(for: item)
-                            .frame(height: 160)
                     }
                 }
             } else {
                 placeholderImage(for: item)
-                    .frame(height: 160)
-            }
-
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.name)
-                        .font(.headline)
-                        .foregroundStyle(.white)
-
-                    if let desc = item.description, !desc.isEmpty {
-                        Text(desc)
-                            .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.8))
-                            .lineLimit(2)
-                    }
-                }
-
-                Spacer()
-
-                Text(String(format: "$%.2f", item.price))
-                    .font(.headline)
-                    .foregroundStyle(PawnTheme.gold)
-            }
-
-            HStack {
-                Button {
-                    addToCart(from: item)
-                } label: {
-                    Label("Add to Cart", systemImage: "cart.badge.plus")
-                        .foregroundStyle(.black)
-                }
-                .buttonStyle(PawnButtonStyle())
-
-                Spacer()
-
-                Button(role: .destructive) {
-                    Task {
-                        let success = await viewModel.deleteItem(item)
-                        if success {
-                            deletedItemName = item.name
-                            showDeleteSuccess = true
-                        }
-                    }
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-                .buttonStyle(.bordered)
             }
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Color.black.opacity(0.75))
-                .shadow(radius: 6)
-        )
     }
 
     private func placeholderImage(for item: StorefrontListItem) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 12)
                 .fill(Color.black.opacity(0.5))
 
             Text(item.name.prefix(1))
-                .font(.largeTitle.bold())
+                .font(.title.bold())
                 .foregroundStyle(PawnTheme.gold)
         }
     }
@@ -277,22 +304,29 @@ struct BrowseScreen: View {
     // MARK: - Bridge to your existing SwiftData cart / checkout
 
     private func addToCart(from storefrontItem: StorefrontListItem) {
-        // This creates a SwiftData Item that your CheckoutScreen already understands.
+        // Uses your Item model exactly
         let newItem = Item(
             name: storefrontItem.name,
             price: Decimal(storefrontItem.price),
             condition: "Good",
             itemDescription: storefrontItem.description ?? "",
             category: "Storefront",
-            imageData: nil,       // you can later download and store image data if you want
+            imageData: nil,
             isInCart: true
         )
 
         context.insert(newItem)
+
+        do {
+            try context.save()
+            print("✅ Added to cart: \(storefrontItem.name)")
+        } catch {
+            print("❌ Failed to save cart item: \(error)")
+        }
     }
 }
 
-// MARK: - Detail view for storefront items
+// MARK: - Detail view for storefront items (unchanged)
 
 struct StorefrontItemDetailView: View {
     let item: StorefrontListItem

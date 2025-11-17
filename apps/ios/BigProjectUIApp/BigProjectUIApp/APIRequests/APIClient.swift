@@ -184,36 +184,52 @@ struct EstimatePriceResponse: Decodable {
 
 // MARK: - Errors
 
-enum StorefrontAPIError: Error {
+enum StorefrontAPIError: LocalizedError {
     case invalidURL
     case httpStatus(Int)
     case serverError(message: String)
     case decodingFailed
     case missingID
     case underlying(Error)
-}
 
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "Invalid URL for storefront API."
+        case .httpStatus(let code):
+            return "Server returned HTTP status \(code)."
+        case .serverError(let message):
+            return message
+        case .decodingFailed:
+            return "Failed to decode API response."
+        case .missingID:
+            return "Response did not include an ID."
+        case .underlying(let err):
+            return err.localizedDescription
+        }
+    }
+}
 // MARK: - API Client
 
 final class StorefrontAPI {
-
+    
     static let shared = StorefrontAPI()
-
+    
     // Base URL of your API (matches your Express app)
     private let baseURL = URL(string: "https://bibe.stream")!
-
+    
     // MUST match process.env.IOS_API_KEY on the server
     // for /api/storefront POST and other iOS-protected endpoints.
     private let iosAPIKey = "super-temp-class-key"
-
+    
     private let urlSession: URLSession
-
+    
     private init(session: URLSession = .shared) {
         self.urlSession = session
     }
-
+    
     // MARK: - Storefront create (completion)
-
+    
     func createItem(
         name: String,
         price: Double,
@@ -227,7 +243,7 @@ final class StorefrontAPI {
             completion(.failure(StorefrontAPIError.invalidURL))
             return
         }
-
+        
         let payload = StorefrontItemPayload(
             name: name,
             price: price,
@@ -236,40 +252,40 @@ final class StorefrontAPI {
             tags: tags,
             active: active
         )
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
-
+        
         do {
             request.httpBody = try JSONEncoder().encode(payload)
         } catch {
             completion(.failure(StorefrontAPIError.underlying(error)))
             return
         }
-
+        
         urlSession.dataTask(with: request) { data, response, error in
             if let error = error {
                 completion(.failure(StorefrontAPIError.underlying(error)))
                 return
             }
-
+            
             guard let http = response as? HTTPURLResponse else {
                 completion(.failure(StorefrontAPIError.httpStatus(-1)))
                 return
             }
-
+            
             guard (200..<300).contains(http.statusCode) else {
                 completion(.failure(StorefrontAPIError.httpStatus(http.statusCode)))
                 return
             }
-
+            
             guard let data = data else {
                 completion(.failure(StorefrontAPIError.decodingFailed))
                 return
             }
-
+            
             do {
                 let decoded = try JSONDecoder().decode(StorefrontCreateResponse.self, from: data)
                 if decoded.ok, let id = decoded.id {
@@ -284,9 +300,9 @@ final class StorefrontAPI {
             }
         }.resume()
     }
-
+    
     // MARK: - Storefront create (async)
-
+    
     func createItem(
         name: String,
         price: Double,
@@ -298,7 +314,7 @@ final class StorefrontAPI {
         guard let url = URL(string: "/api/storefront", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
         }
-
+        
         let payload = StorefrontItemPayload(
             name: name,
             price: price,
@@ -307,25 +323,25 @@ final class StorefrontAPI {
             tags: tags,
             active: active
         )
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
         request.httpBody = try JSONEncoder().encode(payload)
-
+        
         let (data, response) = try await urlSession.data(for: request)
-
+        
         guard let http = response as? HTTPURLResponse else {
             throw StorefrontAPIError.httpStatus(-1)
         }
-
+        
         guard (200..<300).contains(http.statusCode) else {
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
-
+        
         let decoded = try JSONDecoder().decode(StorefrontCreateResponse.self, from: data)
-
+        
         if decoded.ok, let id = decoded.id {
             return id
         } else if let msg = decoded.error {
@@ -334,21 +350,21 @@ final class StorefrontAPI {
             throw StorefrontAPIError.missingID
         }
     }
-
+    
     // MARK: - Storefront listing / browse (async, cursor-based)
-
+    
     /// Matches server.js:
     /// GET /api/storefront?limit=24&afterId=<ObjectId>
     func fetchInventoryPage(
         afterId: String?,
         limit: Int
     ) async throws -> StorefrontListResponse {
-
+        
         var components = URLComponents()
         components.scheme = baseURL.scheme
         components.host = baseURL.host
         components.path = "/api/storefront"
-
+        
         var queryItems: [URLQueryItem] = [
             URLQueryItem(name: "limit", value: String(limit))
         ]
@@ -356,32 +372,32 @@ final class StorefrontAPI {
             queryItems.append(URLQueryItem(name: "afterId", value: afterId))
         }
         components.queryItems = queryItems
-
+        
         guard let url = components.url else {
             throw StorefrontAPIError.invalidURL
         }
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         // GET is public; header not required:
         // request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
-
+        
         let (data, response) = try await urlSession.data(for: request)
-
+        
         guard let http = response as? HTTPURLResponse else {
             throw StorefrontAPIError.httpStatus(-1)
         }
-
+        
         guard (200..<300).contains(http.statusCode) else {
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
-
+        
         let decoded = try JSONDecoder().decode(StorefrontListResponse.self, from: data)
         return decoded
     }
-
+    
     // MARK: - Auth (register)
-
+    
     func register(
         login: String,
         email: String,
@@ -394,7 +410,7 @@ final class StorefrontAPI {
             completion(.failure(StorefrontAPIError.invalidURL))
             return
         }
-
+        
         let payload = RegisterPayload(
             login: login,
             email: email,
@@ -402,39 +418,39 @@ final class StorefrontAPI {
             firstName: firstName,
             lastName: lastName
         )
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
+        
         do {
             request.httpBody = try JSONEncoder().encode(payload)
         } catch {
             completion(.failure(StorefrontAPIError.underlying(error)))
             return
         }
-
+        
         urlSession.dataTask(with: request) { data, response, error in
             if let error = error {
                 completion(.failure(StorefrontAPIError.underlying(error)))
                 return
             }
-
+            
             guard let http = response as? HTTPURLResponse else {
                 completion(.failure(StorefrontAPIError.httpStatus(-1)))
                 return
             }
-
+            
             guard (200..<300).contains(http.statusCode) else {
                 completion(.failure(StorefrontAPIError.httpStatus(http.statusCode)))
                 return
             }
-
+            
             guard let data = data else {
                 completion(.failure(StorefrontAPIError.decodingFailed))
                 return
             }
-
+            
             do {
                 let decoded = try JSONDecoder().decode(RegisterResponse.self, from: data)
                 completion(.success(decoded.id))
@@ -443,7 +459,7 @@ final class StorefrontAPI {
             }
         }.resume()
     }
-
+    
     func register(
         login: String,
         email: String,
@@ -454,7 +470,7 @@ final class StorefrontAPI {
         guard let url = URL(string: "/api/register", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
         }
-
+        
         let payload = RegisterPayload(
             login: login,
             email: email,
@@ -462,28 +478,28 @@ final class StorefrontAPI {
             firstName: firstName,
             lastName: lastName
         )
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(payload)
-
+        
         let (data, response) = try await urlSession.data(for: request)
-
+        
         guard let http = response as? HTTPURLResponse else {
             throw StorefrontAPIError.httpStatus(-1)
         }
-
+        
         guard (200..<300).contains(http.statusCode) else {
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
-
+        
         let decoded = try JSONDecoder().decode(RegisterResponse.self, from: data)
         return decoded.id
     }
-
+    
     // MARK: - Auth (login)
-
+    
     func login(
         loginOrEmail: String,
         password: String,
@@ -493,41 +509,41 @@ final class StorefrontAPI {
             completion(.failure(StorefrontAPIError.invalidURL))
             return
         }
-
+        
         let payload = LoginPayload(loginOrEmail: loginOrEmail, password: password)
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
+        
         do {
             request.httpBody = try JSONEncoder().encode(payload)
         } catch {
             completion(.failure(StorefrontAPIError.underlying(error)))
             return
         }
-
+        
         urlSession.dataTask(with: request) { data, response, error in
             if let error = error {
                 completion(.failure(StorefrontAPIError.underlying(error)))
                 return
             }
-
+            
             guard let http = response as? HTTPURLResponse else {
                 completion(.failure(StorefrontAPIError.httpStatus(-1)))
                 return
             }
-
+            
             guard (200..<300).contains(http.statusCode) else {
                 completion(.failure(StorefrontAPIError.httpStatus(http.statusCode)))
                 return
             }
-
+            
             guard let data = data else {
                 completion(.failure(StorefrontAPIError.decodingFailed))
                 return
             }
-
+            
             do {
                 let user = try JSONDecoder().decode(AuthUser.self, from: data)
                 completion(.success(user))
@@ -536,7 +552,7 @@ final class StorefrontAPI {
             }
         }.resume()
     }
-
+    
     func login(
         loginOrEmail: String,
         password: String
@@ -544,30 +560,30 @@ final class StorefrontAPI {
         guard let url = URL(string: "/api/login", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
         }
-
+        
         let payload = LoginPayload(loginOrEmail: loginOrEmail, password: password)
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(payload)
-
+        
         let (data, response) = try await urlSession.data(for: request)
-
+        
         guard let http = response as? HTTPURLResponse else {
             throw StorefrontAPIError.httpStatus(-1)
         }
-
+        
         guard (200..<300).contains(http.statusCode) else {
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
-
+        
         let user = try JSONDecoder().decode(AuthUser.self, from: data)
         return user
     }
-
+    
     // MARK: - Email verification & password reset (completion)
-
+    
     func resendVerification(
         email: String,
         completion: @escaping (Result<Void, Error>) -> Void
@@ -576,41 +592,41 @@ final class StorefrontAPI {
             completion(.failure(StorefrontAPIError.invalidURL))
             return
         }
-
+        
         let payload = ResendVerificationPayload(email: email)
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
+        
         do {
             request.httpBody = try JSONEncoder().encode(payload)
         } catch {
             completion(.failure(StorefrontAPIError.underlying(error)))
             return
         }
-
+        
         urlSession.dataTask(with: request) { data, response, error in
             if let error = error {
                 completion(.failure(StorefrontAPIError.underlying(error)))
                 return
             }
-
+            
             guard let http = response as? HTTPURLResponse else {
                 completion(.failure(StorefrontAPIError.httpStatus(-1)))
                 return
             }
-
+            
             guard (200..<300).contains(http.statusCode) else {
                 completion(.failure(StorefrontAPIError.httpStatus(http.statusCode)))
                 return
             }
-
+            
             guard let data = data, !data.isEmpty else {
                 completion(.success(()))
                 return
             }
-
+            
             do {
                 let decoded = try JSONDecoder().decode(ResendVerificationResponse.self, from: data)
                 if decoded.ok {
@@ -627,7 +643,7 @@ final class StorefrontAPI {
             }
         }.resume()
     }
-
+    
     func verifyEmailCode(
         email: String,
         code: String,
@@ -637,41 +653,41 @@ final class StorefrontAPI {
             completion(.failure(StorefrontAPIError.invalidURL))
             return
         }
-
+        
         let payload = VerifyEmailCodePayload(email: email, code: code)
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
+        
         do {
             request.httpBody = try JSONEncoder().encode(payload)
         } catch {
             completion(.failure(StorefrontAPIError.underlying(error)))
             return
         }
-
+        
         urlSession.dataTask(with: request) { data, response, error in
             if let error = error {
                 completion(.failure(StorefrontAPIError.underlying(error)))
                 return
             }
-
+            
             guard let http = response as? HTTPURLResponse else {
                 completion(.failure(StorefrontAPIError.httpStatus(-1)))
                 return
             }
-
+            
             guard (200..<300).contains(http.statusCode) else {
                 completion(.failure(StorefrontAPIError.httpStatus(http.statusCode)))
                 return
             }
-
+            
             guard let data = data, !data.isEmpty else {
                 completion(.success(()))
                 return
             }
-
+            
             do {
                 let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
                 if decoded.ok {
@@ -686,7 +702,7 @@ final class StorefrontAPI {
             }
         }.resume()
     }
-
+    
     func forgotPassword(
         email: String,
         completion: @escaping (Result<Void, Error>) -> Void
@@ -695,41 +711,41 @@ final class StorefrontAPI {
             completion(.failure(StorefrontAPIError.invalidURL))
             return
         }
-
+        
         let payload = ForgotPasswordPayload(email: email)
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
+        
         do {
             request.httpBody = try JSONEncoder().encode(payload)
         } catch {
             completion(.failure(StorefrontAPIError.underlying(error)))
             return
         }
-
+        
         urlSession.dataTask(with: request) { data, response, error in
             if let error = error {
                 completion(.failure(StorefrontAPIError.underlying(error)))
                 return
             }
-
+            
             guard let http = response as? HTTPURLResponse else {
                 completion(.failure(StorefrontAPIError.httpStatus(-1)))
                 return
             }
-
+            
             guard (200..<300).contains(http.statusCode) else {
                 completion(.failure(StorefrontAPIError.httpStatus(http.statusCode)))
                 return
             }
-
+            
             guard let data = data, !data.isEmpty else {
                 completion(.success(()))
                 return
             }
-
+            
             do {
                 let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
                 if decoded.ok {
@@ -744,7 +760,7 @@ final class StorefrontAPI {
             }
         }.resume()
     }
-
+    
     func resetPassword(
         token: String,
         newPassword: String,
@@ -754,41 +770,41 @@ final class StorefrontAPI {
             completion(.failure(StorefrontAPIError.invalidURL))
             return
         }
-
+        
         let payload = ResetPasswordPayload(token: token, password: newPassword)
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
+        
         do {
             request.httpBody = try JSONEncoder().encode(payload)
         } catch {
             completion(.failure(StorefrontAPIError.underlying(error)))
             return
         }
-
+        
         urlSession.dataTask(with: request) { data, response, error in
             if let error = error {
                 completion(.failure(StorefrontAPIError.underlying(error)))
                 return
             }
-
+            
             guard let http = response as? HTTPURLResponse else {
                 completion(.failure(StorefrontAPIError.httpStatus(-1)))
                 return
             }
-
+            
             guard (200..<300).contains(http.statusCode) else {
                 completion(.failure(StorefrontAPIError.httpStatus(http.statusCode)))
                 return
             }
-
+            
             guard let data = data, !data.isEmpty else {
                 completion(.success(()))
                 return
             }
-
+            
             do {
                 let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
                 if decoded.ok {
@@ -803,33 +819,33 @@ final class StorefrontAPI {
             }
         }.resume()
     }
-
+    
     // MARK: - Email verification & password reset (async)
-
+    
     func resendVerification(email: String) async throws {
         guard let url = URL(string: "/api/resend-verification", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
         }
-
+        
         let payload = ResendVerificationPayload(email: email)
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(payload)
-
+        
         let (data, response) = try await urlSession.data(for: request)
-
+        
         guard let http = response as? HTTPURLResponse else {
             throw StorefrontAPIError.httpStatus(-1)
         }
-
+        
         guard (200..<300).contains(http.statusCode) else {
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
-
+        
         if data.isEmpty { return }
-
+        
         let decoded = try JSONDecoder().decode(ResendVerificationResponse.self, from: data)
         guard decoded.ok else {
             throw StorefrontAPIError.serverError(
@@ -837,99 +853,99 @@ final class StorefrontAPI {
             )
         }
     }
-
+    
     func verifyEmailCode(email: String, code: String) async throws {
         guard let url = URL(string: "/api/verify-email-code", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
         }
-
+        
         let payload = VerifyEmailCodePayload(email: email, code: code)
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(payload)
-
+        
         let (data, response) = try await urlSession.data(for: request)
-
+        
         guard let http = response as? HTTPURLResponse else {
             throw StorefrontAPIError.httpStatus(-1)
         }
-
+        
         guard (200..<300).contains(http.statusCode) else {
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
-
+        
         if data.isEmpty { return }
-
+        
         let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
         guard decoded.ok else {
             throw StorefrontAPIError.serverError(message: "Verify email code failed")
         }
     }
-
+    
     func forgotPassword(email: String) async throws {
         guard let url = URL(string: "/api/forgot-password", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
         }
-
+        
         let payload = ForgotPasswordPayload(email: email)
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(payload)
-
+        
         let (data, response) = try await urlSession.data(for: request)
-
+        
         guard let http = response as? HTTPURLResponse else {
             throw StorefrontAPIError.httpStatus(-1)
         }
-
+        
         guard (200..<300).contains(http.statusCode) else {
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
-
+        
         if data.isEmpty { return }
-
+        
         let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
         guard decoded.ok else {
             throw StorefrontAPIError.serverError(message: "Forgot password failed")
         }
     }
-
+    
     func resetPassword(token: String, newPassword: String) async throws {
         guard let url = URL(string: "/api/reset-password", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
         }
-
+        
         let payload = ResetPasswordPayload(token: token, password: newPassword)
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(payload)
-
+        
         let (data, response) = try await urlSession.data(for: request)
-
+        
         guard let http = response as? HTTPURLResponse else {
             throw StorefrontAPIError.httpStatus(-1)
         }
-
+        
         guard (200..<300).contains(http.statusCode) else {
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
-
+        
         if data.isEmpty { return }
-
+        
         let decoded = try JSONDecoder().decode(SimpleOKResponse.self, from: data)
         guard decoded.ok else {
             throw StorefrontAPIError.serverError(message: "Reset password failed")
         }
     }
-
+    
     // MARK: - Gemini price estimate
-
+    
     func estimatePrice(
         name: String? = nil,
         description: String? = nil,
@@ -943,7 +959,7 @@ final class StorefrontAPI {
             completion(.failure(StorefrontAPIError.invalidURL))
             return
         }
-
+        
         let imageBase64: EstimateImageBase64Payload?
         if let data = imageData {
             imageBase64 = EstimateImageBase64Payload(
@@ -953,7 +969,7 @@ final class StorefrontAPI {
         } else {
             imageBase64 = nil
         }
-
+        
         let payload = EstimatePricePayload(
             name: name,
             description: description,
@@ -961,40 +977,40 @@ final class StorefrontAPI {
             imageBase64: imageBase64,
             location: location
         )
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
-
+        
         do {
             request.httpBody = try JSONEncoder().encode(payload)
         } catch {
             completion(.failure(StorefrontAPIError.underlying(error)))
             return
         }
-
+        
         urlSession.dataTask(with: request) { data, response, error in
             if let error = error {
                 completion(.failure(StorefrontAPIError.underlying(error)))
                 return
             }
-
+            
             guard let http = response as? HTTPURLResponse else {
                 completion(.failure(StorefrontAPIError.httpStatus(-1)))
                 return
             }
-
+            
             guard (200..<300).contains(http.statusCode) else {
                 completion(.failure(StorefrontAPIError.httpStatus(http.statusCode)))
                 return
             }
-
+            
             guard let data = data else {
                 completion(.failure(StorefrontAPIError.decodingFailed))
                 return
             }
-
+            
             do {
                 let decoded = try JSONDecoder().decode(EstimatePriceResponse.self, from: data)
                 completion(.success(decoded))
@@ -1003,7 +1019,7 @@ final class StorefrontAPI {
             }
         }.resume()
     }
-
+    
     func estimatePrice(
         name: String? = nil,
         description: String? = nil,
@@ -1015,7 +1031,7 @@ final class StorefrontAPI {
         guard let url = URL(string: "/api/estimate-price", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
         }
-
+        
         let imageBase64: EstimateImageBase64Payload?
         if let data = imageData {
             imageBase64 = EstimateImageBase64Payload(
@@ -1025,7 +1041,7 @@ final class StorefrontAPI {
         } else {
             imageBase64 = nil
         }
-
+        
         let payload = EstimatePricePayload(
             name: name,
             description: description,
@@ -1033,56 +1049,61 @@ final class StorefrontAPI {
             imageBase64: imageBase64,
             location: location
         )
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         //request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
         request.httpBody = try JSONEncoder().encode(payload)
-
+        
         let (data, response) = try await urlSession.data(for: request)
-
+        
         guard let http = response as? HTTPURLResponse else {
             throw StorefrontAPIError.httpStatus(-1)
         }
-
+        
         guard (200..<300).contains(http.statusCode) else {
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
-
+        
         let decoded = try JSONDecoder().decode(EstimatePriceResponse.self, from: data)
         return decoded
     }
-        
+    
     // MARK: - Storefront delete (async)
-
+    
     func deleteItem(id: String, hardDelete: Bool = false) async throws {
-        var components = URLComponents()
-        components.scheme = baseURL.scheme
-        components.host = baseURL.host
-        components.path = "/api/storefront/\(id)"
-
+        // Build URL safely with path components so weird IDs don't break it
+        var url = baseURL
+        url.appendPathComponent("api")
+        url.appendPathComponent("storefront")
+        url.appendPathComponent(id)
+        
         if hardDelete {
-            components.queryItems = [
+            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            components?.queryItems = [
                 URLQueryItem(name: "hard", value: "1")
             ]
+            guard let finalURL = components?.url else {
+                throw StorefrontAPIError.invalidURL
+            }
+            url = finalURL
         }
-
-        guard let url = components.url else {
-            throw StorefrontAPIError.invalidURL
-        }
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
-
-        let (_, response) = try await urlSession.data(for: request)
-
+        
+        let (data, response) = try await urlSession.data(for: request)
+        
         guard let http = response as? HTTPURLResponse else {
             throw StorefrontAPIError.httpStatus(-1)
         }
-
+        
         guard (200..<300).contains(http.statusCode) else {
+            if let body = String(data: data, encoding: .utf8) {
+                print("❌ Delete failed: \(http.statusCode) body=\(body)")
+            }
             throw StorefrontAPIError.httpStatus(http.statusCode)
         }
     }
