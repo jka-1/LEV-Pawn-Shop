@@ -22,7 +22,7 @@ struct LoginView: View {
             VStack(spacing: 24) {
                 // Header
                 VStack(spacing: 6) {
-                    Text("Big Lev Pawn Shop")
+                    Text("Lev Pawn Shop")
                         .font(.title.bold())
                         .foregroundColor(PawnTheme.gold)
 
