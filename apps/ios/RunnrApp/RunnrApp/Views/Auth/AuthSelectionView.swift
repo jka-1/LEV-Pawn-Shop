@@ -21,7 +21,7 @@ struct AuthSelectionView: View {
 
             VStack(spacing: 40) {
                 // MARK: - Title
-                Text("Runner App")
+                Text("LEV Runnr App")
                     .font(.largeTitle.bold())
                     .foregroundColor(.white)
 

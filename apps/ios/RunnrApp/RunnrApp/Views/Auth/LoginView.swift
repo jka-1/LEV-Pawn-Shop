@@ -18,12 +18,13 @@ struct LoginView: View {
     private let cardDark = Color(red: 0.10, green: 0.10, blue: 0.10)   // #1A1A1A
     private let gold = Color(red: 0.84, green: 0.65, blue: 0.27)       // #D6A645
     private let textGray = Color.gray.opacity(0.6)
-    
+
     var body: some View {
         ZStack {
             bgBlack.ignoresSafeArea()
             
             VStack(spacing: 40) {
+                
                 // MARK: - Title
                 Text("Login")
                     .font(.largeTitle.bold())
@@ -31,6 +32,7 @@ struct LoginView: View {
                 
                 // MARK: - Card with Inputs
                 VStack(spacing: 20) {
+                    
                     TextField("Email", text: $email)
                         .textInputAutocapitalization(.never)
                         .padding()
@@ -44,11 +46,39 @@ struct LoginView: View {
                         .foregroundColor(.white)
                         .cornerRadius(12)
                     
+                    // MARK: - Error Message
+                    if let error = auth.loginError {
+                        Text(error)
+                            .foregroundColor(.red)
+                            .font(.caption)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, -4)
+                    }
+                    
+                    // MARK: - Login Button
                     Button {
                         auth.login(email: email, password: password)
                     } label: {
-                        GoldButtonContent(title: "Login", icon: "lock.fill", gold: gold)
+                        if auth.isLoading {
+                            ProgressView()
+                                .tint(.black)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(gold)
+                                .cornerRadius(10)
+                        } else {
+                            GoldButtonContent(title: "Login", icon: "lock.fill", gold: gold)
+                        }
                     }
+                    .disabled(auth.isLoading)
+                    
+                    // MARK: - Forgot Password
+                    NavigationLink(destination: ForgotPasswordView()) {
+                        Text("Forgot Password?")
+                            .foregroundColor(gold)
+                            .font(.caption)
+                    }
+                    .padding(.top, -6)
                 }
                 .padding(25)
                 .background(cardDark)
