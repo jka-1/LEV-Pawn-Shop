@@ -2,10 +2,6 @@ name: Generate Swift UML (SwiftPlantUML)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - master
 
 jobs:
   swiftplantuml:
@@ -14,40 +10,39 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Install Homebrew
+      - name: Install Homebrew (ensure brew is usable)
         run: |
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
+          if ! command -v brew; then
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
+          fi
 
+          # Detect Homebrew location
           if [ -d "/opt/homebrew/bin" ]; then
             echo "HOMEBREW_PREFIX=/opt/homebrew" >> $GITHUB_ENV
           elif [ -d "/usr/local/bin" ]; then
             echo "HOMEBREW_PREFIX=/usr/local" >> $GITHUB_ENV
           fi
-          
+
           echo "$HOMEBREW_PREFIX/bin" >> $GITHUB_PATH
 
       - name: Install SwiftPlantUML
         run: |
-          brew tap marcoeidinger/plantuml || true
           brew update
           brew install swiftplantuml
 
       - name: Install Java + PlantUML
         run: |
-          brew install --cask temurin || true
+          brew install --cask temurin
           curl -L -o plantuml.jar https://downloads.sourceforge.net/project/plantuml/plantuml.jar
 
       - name: Generate PlantUML script (.puml)
         run: |
           swiftplantuml classdiagram ./ --output consoleOnly > diagram.puml
 
-      - name: Render diagram to PNG
+      - name: Render PNG
         run: |
           java -jar plantuml.jar -tpng diagram.puml -o output
-          ls -la output
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -56,4 +51,3 @@ jobs:
           path: |
             diagram.puml
             output/*.png
-            output/*.svg
