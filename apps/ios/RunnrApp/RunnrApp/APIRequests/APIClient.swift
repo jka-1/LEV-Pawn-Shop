@@ -489,7 +489,7 @@ final class StorefrontAPI {
     // MARK: - Runner Meetup
     func getRunnerMeetup(runnerId: String) async throws -> MeetupPoint {
         // Construct URL: assuming your endpoint is /api/runners/{id}/meetup
-        guard let url = URL(string: "/api/runners/\(runnerId)/meetup", relativeTo: baseURL) else {
+        guard let url = URL(string: "/api/runner/runners/\(runnerId)/meetup", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
         }
 
@@ -634,7 +634,7 @@ final class StorefrontAPI {
     
     // MARK: Runner assignments fetching
     func getRunnerAssignments(runnerId: String) async throws -> [Assignment] {
-        guard let url = URL(string: "/api/runners/\(runnerId)/assignments", relativeTo: baseURL) else {
+        guard let url = URL(string: "/api/runner/runners/\(runnerId)/assignments", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
         }
 
