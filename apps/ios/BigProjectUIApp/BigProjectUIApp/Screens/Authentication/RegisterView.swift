@@ -4,74 +4,144 @@
 //
 //  Created by Matthew Pearaylall on 11/16/25.
 //
+
 import SwiftUI
 
 struct RegisterView: View {
     @EnvironmentObject var session: SessionManager
+    @Environment(\.dismiss) private var dismiss
 
-    @State private var firstName = ""
-    @State private var lastName = ""
-    @State private var email = ""
-    @State private var password = ""
-    @State private var confirmPassword = ""
+    @State private var firstName: String = ""
+    @State private var lastName: String = ""
+    @State private var email: String = ""
+    @State private var password: String = ""
+    @State private var confirmPassword: String = ""
 
-    @State private var errorMessage = ""
-    @State private var navigateToVerify = false
+    @State private var errorMessage: String?
+    @State private var isRegistering: Bool = false
+
+    // 👉 Controls navigation to the 6-digit code screen
+    @State private var navigateToVerifyCode: Bool = false
+
+    // 👉 Used so EmailCodeVerificationView can tell us to pop back to Login
+    @State private var shouldPopToLogin: Bool = false
 
     var body: some View {
-        VStack(spacing: 20) {
+        ZStack {
+            PawnTheme.background.ignoresSafeArea()
 
-            Text("Create Account")
-                .font(.largeTitle.bold())
-                .foregroundColor(.white)
+            VStack(spacing: 20) {
+                Text("Create Account")
+                    .font(.largeTitle.bold())
+                    .foregroundColor(PawnTheme.gold)
+                    .padding(.top, 20)
 
-            Group {
-                TextField("First Name", text: $firstName)
-                TextField("Last Name", text: $lastName)
-                TextField("Email", text: $email)
-                    .autocapitalization(.none)
-                SecureField("Password", text: $password)
-                SecureField("Confirm Password", text: $confirmPassword)
-            }
-            .textFieldStyle(.roundedBorder)
+                VStack(spacing: 16) {
+                    TextField("First Name", text: $firstName)
+                        .padding()
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(12)
+                        .foregroundColor(.white)
 
-            Button {
-                Task {
-                    await register()
+                    TextField("Last Name", text: $lastName)
+                        .padding()
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(12)
+                        .foregroundColor(.white)
+
+                    TextField("Email", text: $email)
+                        .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .padding()
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(12)
+                        .foregroundColor(.white)
+
+                    SecureField("Password", text: $password)
+                        .padding()
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(12)
+                        .foregroundColor(.white)
+
+                    SecureField("Confirm Password", text: $confirmPassword)
+                        .padding()
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(12)
+                        .foregroundColor(.white)
                 }
-            } label: {
-                Text("Register")
+                .padding(.horizontal)
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .foregroundColor(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+
+                Button {
+                    Task { await handleRegister() }
+                } label: {
+                    HStack {
+                        if isRegistering {
+                            ProgressView().tint(.black)
+                        } else {
+                            Text("Register")
+                                .fontWeight(.semibold)
+                        }
+                    }
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(PawnTheme.gold)
+                    .background(canSubmit ? PawnTheme.gold : Color.gray)
                     .foregroundColor(.black)
-                    .cornerRadius(8)
-            }
+                    .cornerRadius(14)
+                    .shadow(radius: 6)
+                }
+                .disabled(isRegistering || !canSubmit)
+                .padding(.horizontal)
 
-            if navigateToVerify {
-                NavigationLink("", destination:
-                    EmailCodeVerificationView(email: email),
-                    isActive: $navigateToVerify
-                )
-            }
+                Spacer()
 
-            if !errorMessage.isEmpty {
-                Text(errorMessage).foregroundColor(.red)
+                // Hidden NavigationLink that pushes EmailCodeVerificationView
+                NavigationLink(
+                    destination: EmailCodeVerificationView(
+                        email: email,
+                        onVerified: {
+                            // 🔔 Called from EmailCodeVerificationView after tapping "Return to Login"
+                            shouldPopToLogin = true
+                        }
+                    ),
+                    isActive: $navigateToVerifyCode
+                ) {
+                    EmptyView()
+                }
             }
-
-            Spacer()
         }
-        .padding()
-        .background(PawnTheme.background.ignoresSafeArea())
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: shouldPopToLogin) { value in
+            if value {
+                // Pop RegisterView → back to LoginView
+                dismiss()
+            }
+        }
     }
 
-    private func register() async {
-        guard password == confirmPassword else {
-            errorMessage = "Passwords do not match"
-            return
+    private var canSubmit: Bool {
+        !firstName.isEmpty &&
+        !lastName.isEmpty &&
+        !email.isEmpty &&
+        !password.isEmpty &&
+        password == confirmPassword
+    }
+
+    private func handleRegister() async {
+        await MainActor.run {
+            errorMessage = nil
+            isRegistering = true
         }
 
         do {
+            // 1️⃣ Create user on backend (server sends the 6-digit code email)
             try await session.register(
                 firstName: firstName,
                 lastName: lastName,
@@ -79,11 +149,16 @@ struct RegisterView: View {
                 password: password
             )
 
-            let sent = await session.requestVerificationCode(email: email)
-            if sent { navigateToVerify = true }
-
+            // 2️⃣ Go to code verification screen
+            await MainActor.run {
+                isRegistering = false
+                navigateToVerifyCode = true
+            }
         } catch {
-            errorMessage = "Email already exists or invalid"
+            await MainActor.run {
+                errorMessage = "Registration failed. Try again or use a different email."
+                isRegistering = false
+            }
         }
     }
 }

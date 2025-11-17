@@ -17,6 +17,11 @@ struct MainScreen: View {
                     menuButton(label: "My Items", color: .yellow)
                 }
 
+                // NEW: Scanner button
+                NavigationLink(destination: ScannerScreen()) {
+                    menuButton(label: "Scanner", color: .blue)
+                }
+
                 Spacer()
             }
             .padding()

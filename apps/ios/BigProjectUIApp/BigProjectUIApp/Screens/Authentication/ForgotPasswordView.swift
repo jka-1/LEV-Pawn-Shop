@@ -4,96 +4,135 @@
 //
 //  Created by Matthew Pearaylall on 11/16/25.
 //
+
 import SwiftUI
 
 struct ForgotPasswordView: View {
     @EnvironmentObject var session: SessionManager
+    @Environment(\.dismiss) private var dismiss
 
-    @State private var email = ""
-    @State private var navigate = false
-    @State private var error = ""
+    @State private var email: String = ""
+    @State private var isSending: Bool = false
+    @State private var errorMessage: String?
+    @State private var didSend: Bool = false
 
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Forgot Password")
-                .font(.largeTitle.bold())
-                .foregroundColor(.white)
+        ZStack {
+            PawnTheme.background.ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                Text("Reset Password")
+                    .font(.largeTitle.bold())
+                    .foregroundColor(PawnTheme.gold)
+                    .padding(.top, 20)
+
+                if !didSend {
+                    entryState
+                } else {
+                    successState
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal)
+        }
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    // MARK: - States
+
+    private var entryState: some View {
+        VStack(spacing: 16) {
+            Text("Enter your email and we’ll send you a link to change your password.")
+                .foregroundColor(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
 
             TextField("Email", text: $email)
-                .textFieldStyle(.roundedBorder)
-                .autocapitalization(.none)
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .pawnField()
 
-            Button("Send Code") {
-                Task {
-                    let sent = await session.sendForgotPasswordCode(email: email)
-                    if sent { navigate = true }
-                    else { error = "Email not found" }
+            if let errorMessage {
+                Text(errorMessage)
+                    .foregroundColor(.red)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button {
+                Task { await handleSendLink() }
+            } label: {
+                HStack {
+                    if isSending {
+                        ProgressView().tint(.black)
+                    } else {
+                        Text("Send Reset Link")
+                            .fontWeight(.semibold)
+                    }
                 }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(PawnTheme.gold)
+                .foregroundColor(.black)
+                .cornerRadius(14)
+                .shadow(radius: 6)
             }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(PawnTheme.gold)
-            .foregroundColor(.black)
-            .cornerRadius(8)
-
-            NavigationLink("Reset Password", destination:
-                ResetPasswordView(email: email),
-                isActive: $navigate
-            )
-
-            if !error.isEmpty {
-                Text(error).foregroundColor(.red)
-            }
-
-            Spacer()
+            .disabled(isSending || email.isEmpty)
         }
-        .padding()
-        .background(PawnTheme.background.ignoresSafeArea())
+    }
+
+    private var successState: some View {
+        VStack(spacing: 16) {
+            Text("Email Sent")
+                .font(.title2.bold())
+                .foregroundColor(.white)
+
+            Text("If an account exists for \(email), a password reset link has been sent. Use that link to change your password.")
+                .foregroundColor(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
+
+            Button {
+                dismiss()   // back to LoginView
+            } label: {
+                Text("Return to Login")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(PawnTheme.gold)
+                    .foregroundColor(.black)
+                    .cornerRadius(14)
+            }
+        }
+    }
+
+    // MARK: - Logic
+
+    private func handleSendLink() async {
+        await MainActor.run {
+            errorMessage = nil
+            isSending = true
+        }
+
+        let ok = await session.sendForgotPasswordCode(email: email)
+
+        await MainActor.run {
+            isSending = false
+            if ok {
+                didSend = true
+            } else {
+                errorMessage = "Something went wrong sending the reset email. Try again."
+            }
+        }
     }
 }
 
-struct ResetPasswordView: View {
-    let email: String
-    @EnvironmentObject var session: SessionManager
-
-    @State private var code = ""
-    @State private var newPassword = ""
-    @State private var message = ""
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Reset Password")
-                .font(.largeTitle.bold())
-                .foregroundColor(.white)
-
-            TextField("Verification Code", text: $code)
-                .keyboardType(.numberPad)
-                .textFieldStyle(.roundedBorder)
-
-            SecureField("New Password", text: $newPassword)
-                .textFieldStyle(.roundedBorder)
-
-            Button("Reset") {
-                Task {
-                    let ok = await session.resetPassword(
-                        token: code,
-                        newPassword: newPassword,
-                        email: email
-                    )
-                    message = ok ? "Password Updated!" : "Invalid code"
-                }
-            }
-            .frame(maxWidth: .infinity)
+// reuse pawnField again
+private extension View {
+    func pawnField() -> some View {
+        self
             .padding()
-            .background(PawnTheme.gold)
-            .foregroundColor(.black)
-            .cornerRadius(8)
-
-            Text(message).foregroundColor(.white)
-
-            Spacer()
-        }
-        .padding()
-        .background(PawnTheme.background.ignoresSafeArea())
+            .background(Color.black.opacity(0.6))
+            .cornerRadius(12)
+            .foregroundColor(.white)
     }
 }

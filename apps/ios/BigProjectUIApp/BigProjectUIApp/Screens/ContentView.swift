@@ -26,6 +26,15 @@ struct ContentView: View {
 
                         // MARK: Navigation Actions
 
+                        // NEW: Scanner button
+                        NavigationLink{
+                            ScannerScreen()
+                        } label: {
+                            Label("Scanner", systemImage: "qrcode.viewfinder")
+                                .foregroundStyle(.black)
+                        }
+                        .buttonStyle(PawnButtonStyle())
+                        
                         NavigationLink {
                             AddItemView()
                         } label: {

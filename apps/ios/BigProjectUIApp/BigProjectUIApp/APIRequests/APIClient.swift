@@ -1037,7 +1037,7 @@ final class StorefrontAPI {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
+        //request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
         request.httpBody = try JSONEncoder().encode(payload)
 
         let (data, response) = try await urlSession.data(for: request)
