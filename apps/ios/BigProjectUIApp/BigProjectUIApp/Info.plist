@@ -2,8 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key></key>
+	<string></string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>This app needs your location to suggest the safest, optimal meetup point.</string>
+	<string>This app needs your location to suggest the safest, optimal meetup point.
+</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app uses the camera to scan items for price estimates.</string>
 </dict>
