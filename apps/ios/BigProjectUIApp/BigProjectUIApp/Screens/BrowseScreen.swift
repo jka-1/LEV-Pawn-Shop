@@ -2,8 +2,12 @@
 //  BrowseScreen.swift
 //  BigProjectUIApp
 //
+//  Remote storefront inventory from /api/storefront
+//  Layout matches InventoryView style
+//
 
 import SwiftUI
+import SwiftData
 
 // MARK: - ViewModel
 
@@ -20,7 +24,7 @@ final class BrowseViewModel: ObservableObject {
     func loadInitial() {
         guard items.isEmpty else { return }
         Task { await loadMore() }
-    }
+    } 
 
     func loadMoreIfNeeded(currentItem item: StorefrontListItem) {
         guard let last = items.last else { return }
@@ -57,19 +61,19 @@ final class BrowseViewModel: ObservableObject {
 // MARK: - BrowseScreen
 
 struct BrowseScreen: View {
+    @Environment(\.modelContext) private var context   // so we can create SwiftData cart Items
     @StateObject private var viewModel = BrowseViewModel()
 
     var body: some View {
         ZStack {
-            PawnTheme.background
-                .ignoresSafeArea()
+            PawnTheme.background.ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 0) {
                 header
 
                 if let error = viewModel.errorMessage {
                     Text(error)
-                        .foregroundColor(.red)
+                        .foregroundStyle(.red)
                         .font(.footnote)
                         .padding(.horizontal)
                         .padding(.top, 4)
@@ -88,9 +92,8 @@ struct BrowseScreen: View {
     private var header: some View {
         HStack {
             Text("Browse Inventory")
-                .font(.largeTitle)
-                .bold()
-                .foregroundColor(.white)
+                .font(.largeTitle.bold())
+                .foregroundStyle(.white)
 
             Spacer()
         }
@@ -110,16 +113,23 @@ struct BrowseScreen: View {
         } else if viewModel.items.isEmpty {
             Spacer()
             Text("No items available yet.")
-                .foregroundColor(.white.opacity(0.7))
+                .foregroundStyle(.white.opacity(0.7))
             Spacer()
         } else {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     ForEach(viewModel.items) { item in
-                        itemCard(item)
-                            .onAppear {
-                                viewModel.loadMoreIfNeeded(currentItem: item)
+                        NavigationLink {
+                            StorefrontItemDetailView(item: item) {
+                                addToCart(from: item)
                             }
+                        } label: {
+                            itemCard(item)
+                        }
+                        .buttonStyle(.plain)
+                        .onAppear {
+                            viewModel.loadMoreIfNeeded(currentItem: item)
+                        }
                     }
 
                     if viewModel.isLoading {
@@ -128,67 +138,198 @@ struct BrowseScreen: View {
                     } else if viewModel.reachedEnd {
                         Text("You've reached the end.")
                             .font(.footnote)
-                            .foregroundColor(.white.opacity(0.5))
+                            .foregroundStyle(.white.opacity(0.5))
                             .padding(.vertical, 12)
                     }
                 }
                 .padding(.horizontal)
-                .padding(.vertical, 12)
+                .padding(.bottom, 16)
             }
         }
     }
 
-    // MARK: - Card UI
+    // MARK: - Card (matches InventoryView style)
 
-    @ViewBuilder
     private func itemCard(_ item: StorefrontListItem) -> some View {
-        HStack(spacing: 12) {
-            // Simple initial-based thumbnail
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.black.opacity(0.6))
-
-                Text(item.name.prefix(1))
-                    .font(.title)
-                    .bold()
-                    .foregroundColor(PawnTheme.gold)
+        VStack(alignment: .leading, spacing: 10) {
+            // Big image from server imageUrl
+            if let urlString = item.imageUrl,
+               let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color.black.opacity(0.4))
+                            ProgressView()
+                                .tint(PawnTheme.gold)
+                        }
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(height: 160)
+                            .clipped()
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                    case .failure:
+                        placeholderImage(for: item)
+                            .frame(height: 160)
+                    @unknown default:
+                        placeholderImage(for: item)
+                            .frame(height: 160)
+                    }
+                }
+            } else {
+                placeholderImage(for: item)
+                    .frame(height: 160)
             }
-            .frame(width: 60, height: 60)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.name)
-                    .font(.headline)
-                    .foregroundColor(.white)
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.name)
+                        .font(.headline)
+                        .foregroundStyle(.white)
 
-                if let desc = item.description, !desc.isEmpty {
-                    Text(desc)
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
-                        .lineLimit(2)
+                    if let desc = item.description, !desc.isEmpty {
+                        Text(desc)
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.8))
+                            .lineLimit(2)
+                    }
                 }
 
+                Spacer()
+
                 Text(String(format: "$%.2f", item.price))
-                    .font(.subheadline)
-                    .bold()
-                    .foregroundColor(PawnTheme.gold)
+                    .font(.headline)
+                    .foregroundStyle(PawnTheme.gold)
             }
 
-            Spacer()
+            HStack {
+                Button {
+                    addToCart(from: item)
+                } label: {
+                    Label("Add to Cart", systemImage: "cart.badge.plus")
+                        .foregroundStyle(.black)
+                }
+                .buttonStyle(PawnButtonStyle())
+
+                Spacer()
+            }
         }
         .padding()
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 18)
                 .fill(Color.black.opacity(0.75))
                 .shadow(radius: 6)
         )
     }
+
+    private func placeholderImage(for item: StorefrontListItem) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.black.opacity(0.5))
+
+            Text(item.name.prefix(1))
+                .font(.largeTitle.bold())
+                .foregroundStyle(PawnTheme.gold)
+        }
+    }
+
+    // MARK: - Bridge to your existing SwiftData cart / checkout
+
+    private func addToCart(from storefrontItem: StorefrontListItem) {
+        // This creates a SwiftData Item that your CheckoutScreen already understands.
+        let newItem = Item(
+            name: storefrontItem.name,
+            price: Decimal(storefrontItem.price),
+            condition: "Good",
+            itemDescription: storefrontItem.description ?? "",
+            category: "Storefront",
+            imageData: nil,       // you can later download and store image data if you want
+            isInCart: true
+        )
+
+        context.insert(newItem)
+    }
 }
 
-// MARK: - Preview
+// MARK: - Detail view for storefront items
 
-struct BrowseScreen_Previews: PreviewProvider {
-    static var previews: some View {
-        BrowseScreen()
-            .preferredColorScheme(.dark)
+struct StorefrontItemDetailView: View {
+    let item: StorefrontListItem
+    let onAddToCart: () -> Void
+
+    var body: some View {
+        ZStack {
+            PawnTheme.background.ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Big image
+                    if let urlString = item.imageUrl,
+                       let url = URL(string: urlString) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .empty:
+                                ZStack {
+                                    Rectangle()
+                                        .fill(Color.black.opacity(0.3))
+                                    ProgressView()
+                                        .tint(PawnTheme.gold)
+                                }
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                            case .failure:
+                                Rectangle()
+                                    .fill(Color.black.opacity(0.3))
+                                    .overlay(
+                                        Text(item.name.prefix(1))
+                                            .font(.largeTitle.bold())
+                                            .foregroundColor(PawnTheme.gold)
+                                    )
+                            @unknown default:
+                                Rectangle()
+                                    .fill(Color.black.opacity(0.3))
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal)
+                    }
+
+                    Text(item.name)
+                        .font(.title)
+                        .bold()
+                        .foregroundStyle(.white)
+
+                    Text(String(format: "$%.2f", item.price))
+                        .font(.title2.bold())
+                        .foregroundStyle(PawnTheme.gold)
+
+                    if let desc = item.description, !desc.isEmpty {
+                        Text(desc)
+                            .foregroundStyle(.white.opacity(0.9))
+                            .padding(.horizontal)
+                    }
+
+                    Button {
+                        onAddToCart()
+                    } label: {
+                        Label("Add to Cart", systemImage: "cart.badge.plus")
+                            .foregroundStyle(.black)
+                    }
+                    .buttonStyle(PawnButtonStyle())
+                    .padding(.top, 8)
+
+                    Spacer(minLength: 24)
+                }
+                .padding(.bottom, 24)
+            }
+        }
+        .navigationTitle("Item Details")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

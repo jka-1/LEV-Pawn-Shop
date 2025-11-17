@@ -14,6 +14,8 @@ struct ItemDetailView: View {
 
     @Bindable var item: Item
 
+    @State private var showDeleteAlert = false
+
     var body: some View {
         ZStack {
             PawnTheme.background.ignoresSafeArea()
@@ -54,15 +56,16 @@ struct ItemDetailView: View {
                     Button {
                         item.isInCart.toggle()
                     } label: {
-                        Label(item.isInCart ? "Remove from Cart" : "Add to Cart",
-                              systemImage: item.isInCart ? "cart.badge.minus" : "cart.badge.plus")
-                            .foregroundStyle(.black)
+                        Label(
+                            item.isInCart ? "Remove from Cart" : "Add to Cart",
+                            systemImage: item.isInCart ? "cart.badge.minus" : "cart.badge.plus"
+                        )
+                        .foregroundStyle(.black)
                     }
                     .buttonStyle(PawnButtonStyle())
 
                     Button(role: .destructive) {
-                        context.delete(item)
-                        dismiss()
+                        showDeleteAlert = true
                     } label: {
                         Label("Delete Item", systemImage: "trash")
                             .foregroundStyle(.red)
@@ -76,5 +79,22 @@ struct ItemDetailView: View {
         }
         .navigationTitle("Item Details")
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Delete this item?", isPresented: $showDeleteAlert) {
+            Button("Delete", role: .destructive) {
+                context.delete(item)
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Are you sure you want to delete “\(item.name)”? This cannot be undone.")
+        }
+    }
+
+    // Local currency formatter, same style as your checkout
+    private var currencyFormatter: NumberFormatter {
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        f.locale = .current
+        return f
     }
 }
