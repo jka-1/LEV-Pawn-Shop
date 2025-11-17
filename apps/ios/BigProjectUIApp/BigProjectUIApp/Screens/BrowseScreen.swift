@@ -24,7 +24,7 @@ final class BrowseViewModel: ObservableObject {
     func loadInitial() {
         guard items.isEmpty else { return }
         Task { await loadMore() }
-    } 
+    }
 
     func loadMoreIfNeeded(currentItem item: StorefrontListItem) {
         guard let last = items.last else { return }
@@ -56,6 +56,22 @@ final class BrowseViewModel: ObservableObject {
 
         isLoading = false
     }
+
+    /// Delete an item from the remote storefront and update local list.
+    /// Returns true on success so the caller can show a confirmation.
+    func deleteItem(_ item: StorefrontListItem) async -> Bool {
+        errorMessage = nil
+        do {
+            try await StorefrontAPI.shared.deleteItem(id: item.id)
+            if let idx = items.firstIndex(where: { $0.id == item.id }) {
+                items.remove(at: idx)
+            }
+            return true
+        } catch {
+            errorMessage = "Failed to delete item: \(error.localizedDescription)"
+            return false
+        }
+    }
 }
 
 // MARK: - BrowseScreen
@@ -63,6 +79,10 @@ final class BrowseViewModel: ObservableObject {
 struct BrowseScreen: View {
     @Environment(\.modelContext) private var context   // so we can create SwiftData cart Items
     @StateObject private var viewModel = BrowseViewModel()
+
+    // Alert state for successful deletion
+    @State private var showDeleteSuccess = false
+    @State private var deletedItemName: String = ""
 
     var body: some View {
         ZStack {
@@ -84,6 +104,11 @@ struct BrowseScreen: View {
         }
         .onAppear {
             viewModel.loadInitial()
+        }
+        .alert("Item deleted", isPresented: $showDeleteSuccess) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("\"\(deletedItemName)\" was successfully deleted.")
         }
     }
 
@@ -215,6 +240,19 @@ struct BrowseScreen: View {
                 .buttonStyle(PawnButtonStyle())
 
                 Spacer()
+
+                Button(role: .destructive) {
+                    Task {
+                        let success = await viewModel.deleteItem(item)
+                        if success {
+                            deletedItemName = item.name
+                            showDeleteSuccess = true
+                        }
+                    }
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .buttonStyle(.bordered)
             }
         }
         .padding()

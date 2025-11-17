@@ -204,7 +204,7 @@ final class StorefrontAPI {
 
     // MUST match process.env.IOS_API_KEY on the server
     // for /api/storefront POST and other iOS-protected endpoints.
-    private let iosAPIKey = "REPLACE_WITH_REAL_IOS_API_KEY"
+    private let iosAPIKey = "super-temp-class-key"
 
     private let urlSession: URLSession
 
@@ -1052,5 +1052,38 @@ final class StorefrontAPI {
 
         let decoded = try JSONDecoder().decode(EstimatePriceResponse.self, from: data)
         return decoded
+    }
+        
+    // MARK: - Storefront delete (async)
+
+    func deleteItem(id: String, hardDelete: Bool = false) async throws {
+        var components = URLComponents()
+        components.scheme = baseURL.scheme
+        components.host = baseURL.host
+        components.path = "/api/storefront/\(id)"
+
+        if hardDelete {
+            components.queryItems = [
+                URLQueryItem(name: "hard", value: "1")
+            ]
+        }
+
+        guard let url = components.url else {
+            throw StorefrontAPIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue(iosAPIKey, forHTTPHeaderField: "x-ios-key")
+
+        let (_, response) = try await urlSession.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw StorefrontAPIError.httpStatus(-1)
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            throw StorefrontAPIError.httpStatus(http.statusCode)
+        }
     }
 }
