@@ -46,6 +46,51 @@ class RunnerAuthState: ObservableObject {
             }
         }
     }
+    
+    func register(
+        name: String,
+        email: String,
+        password: String,
+        profileImage: Data?,
+        certificationPDF: Data?,
+        driversLicenseImage: Data?
+    ) {
+        loginError = nil
+        isLoading = true
+
+        Task {
+            do {
+                // Send registration request through StorefrontAPI
+                let token = try await api.registerRunner(
+                    name: name,
+                    email: email,
+                    password: password,
+                    profileImage: profileImage,
+                    certificationPDF: certificationPDF,
+                    driversLicenseImage: driversLicenseImage
+                )
+                KeychainHelper.save(key: "token", value: token)
+                
+                let user = try await api.getCurrentRunner(token: token)
+                DispatchQueue.main.async {
+                    self.currentUser = user
+                    self.isLoggedIn = true
+                    self.isLoading = false
+                    // Save ID/token for persistent login
+                    KeychainHelper.save(key: self.tokenKey, value: user.id)
+                    print("Registration successful")
+                }
+
+            } catch {
+                print("Registration failed:", error.localizedDescription)
+                DispatchQueue.main.async {
+                    self.isLoading = false
+                    self.loginError = "Registration failed. Check your details or connection."
+                }
+            }
+        }
+    }
+
 
     func autoLogin() {
         if let saved = KeychainHelper.read(key: tokenKey) {

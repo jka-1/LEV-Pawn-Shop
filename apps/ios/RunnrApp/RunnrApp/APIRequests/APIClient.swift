@@ -381,7 +381,7 @@ final class StorefrontAPI {
     }
 
     // MARK: - Auth (register)
-
+    
     func register(
         login: String,
         email: String,
@@ -443,6 +443,8 @@ final class StorefrontAPI {
             }
         }.resume()
     }
+    
+    
 
     func register(
         login: String,
@@ -480,6 +482,107 @@ final class StorefrontAPI {
 
         let decoded = try JSONDecoder().decode(RegisterResponse.self, from: data)
         return decoded.id
+    }
+    // MARK: - Runner Registration (async)
+    func registerRunner(
+        name: String,
+        email: String,
+        password: String,
+        profileImage: Data? = nil,
+        certificationPDF: Data? = nil,
+        driversLicenseImage: Data? = nil
+    ) async throws -> String {
+        
+        guard let url = URL(string: "/api/runner/register", relativeTo: baseURL) else {
+            throw StorefrontAPIError.invalidURL
+        }
+        
+        // Create boundary for multipart/form-data
+        let boundary = "Boundary-\(UUID().uuidString)"
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        var body = Data()
+        
+        // Helper to append a string field
+        func appendField(name: String, value: String) {
+            body.append("--\(boundary)\r\n")
+            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+            body.append("\(value)\r\n")
+        }
+        
+        // Helper to append a file
+        func appendFile(name: String, filename: String, data: Data, mimeType: String) {
+            body.append("--\(boundary)\r\n")
+            body.append("Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n")
+            body.append("Content-Type: \(mimeType)\r\n\r\n")
+            body.append(data)
+            body.append("\r\n")
+        }
+        
+        // Add string fields
+        appendField(name: "name", value: name)
+        appendField(name: "email", value: email)
+        appendField(name: "password", value: password)
+        
+        // Add files if present
+        if let profileImage = profileImage {
+            appendFile(name: "profileImage", filename: "profile.jpg", data: profileImage, mimeType: "image/jpeg")
+        }
+        if let certificationPDF = certificationPDF {
+            appendFile(name: "certificationPDF", filename: "cert.pdf", data: certificationPDF, mimeType: "application/pdf")
+        }
+        if let driversLicenseImage = driversLicenseImage {
+            appendFile(name: "driversLicenseImage", filename: "license.jpg", data: driversLicenseImage, mimeType: "image/jpeg")
+        }
+        
+        // End boundary
+        body.append("--\(boundary)--\r\n")
+        
+        request.httpBody = body
+        
+        // Send request
+        let (data, response) = try await urlSession.data(for: request)
+        
+        guard let http = response as? HTTPURLResponse else {
+            throw StorefrontAPIError.httpStatus(-1)
+        }
+        
+        guard (200..<300).contains(http.statusCode) else {
+            throw StorefrontAPIError.httpStatus(http.statusCode)
+        }
+        
+        // Decode response
+        let decoded = try JSONDecoder().decode(RegisterResponse.self, from: data)
+        return decoded.id
+    }
+    
+    
+
+    /// Fetch the current runner's full user info using a JWT token
+    func getCurrentRunner(token: String) async throws -> AuthUser {
+        guard let url = URL(string: "/api/runner/me", relativeTo: baseURL) else {
+            throw StorefrontAPIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await urlSession.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw StorefrontAPIError.httpStatus(-1)
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            throw StorefrontAPIError.httpStatus(http.statusCode)
+        }
+
+        let user = try JSONDecoder().decode(AuthUser.self, from: data)
+        return user
     }
 
     // MARK: - Auth (login)

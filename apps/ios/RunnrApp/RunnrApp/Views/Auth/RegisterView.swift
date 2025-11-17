@@ -15,6 +15,8 @@ struct RegisterView: View {
     @State private var password = ""
     @State private var profileImage: UIImage? = nil
     @State private var pdfDocument: URL? = nil
+    @State private var dlImage: UIImage? = nil
+    
     @State private var showImagePicker = false
     @State private var showPDFPicker = false
     @State private var showCamera = false
@@ -123,8 +125,17 @@ struct RegisterView: View {
                         
                         // Register Button
                         Button {
-                            auth.register(name: name, email: email, password: password)
-                            // optionally pass profileImage, pdfDocument, and DL image for server upload
+                            let profileImageData = profileImage?.jpegData(compressionQuality: 0.8)
+                            let pdfData = pdfDocument != nil ? try? Data(contentsOf: pdfDocument!) : nil
+                            let dlImageData = dlImage?.jpegData(compressionQuality: 0.8)
+                            auth.register(
+                                name: name,
+                                email: email,
+                                password: password,
+                                profileImage: profileImageData,
+                                certificationPDF: pdfData,
+                                driversLicenseImage: dlImageData)
+                        
                         } label: {
                             GoldButtonContent(title: "Create Account", icon: "person.fill.badge.plus", gold: gold)
                         }
