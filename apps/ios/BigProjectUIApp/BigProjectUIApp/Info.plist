@@ -4,5 +4,7 @@
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>This app needs your location to suggest the safest, optimal meetup point.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app uses the camera to scan items for price estimates.</string>
 </dict>
 </plist>
