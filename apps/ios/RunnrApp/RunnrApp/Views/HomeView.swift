@@ -88,7 +88,7 @@ struct HomeView: View {
                             }
 
                             NavigationLink {
-                                Text("Assignments Screen") // placeholder
+                                AssignmentsView() // placeholder
                             } label: {
                                 GoldButtonContent(
                                     title: "View Assignments",

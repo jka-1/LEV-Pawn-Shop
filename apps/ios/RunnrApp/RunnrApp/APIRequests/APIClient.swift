@@ -561,7 +561,7 @@ final class StorefrontAPI {
     
     
 
-    /// Fetch the current runner's full user info using a JWT token
+    // MARK: Fetch the current runner's full user info using a JWT token
     func getCurrentRunner(token: String) async throws -> AuthUser {
         guard let url = URL(string: "/api/runner/me", relativeTo: baseURL) else {
             throw StorefrontAPIError.invalidURL
@@ -584,6 +584,40 @@ final class StorefrontAPI {
         let user = try JSONDecoder().decode(AuthUser.self, from: data)
         return user
     }
+    
+    // MARK: Runner assignments fetching
+    func getRunnerAssignments(runnerId: String) async throws -> [Assignment] {
+        guard let url = URL(string: "/api/runners/\(runnerId)/assignments", relativeTo: baseURL) else {
+            throw StorefrontAPIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // Attach JWT token from Keychain for authorization
+        if let token = KeychainHelper.read(key: "RUNNER_AUTH_TOKEN") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await urlSession.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw StorefrontAPIError.httpStatus(-1)
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            throw StorefrontAPIError.httpStatus(http.statusCode)
+        }
+
+        // Decode array of assignments
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode([Assignment].self, from: data)
+
+        //return try JSONDecoder().decode([Assignment].self, from: data)
+    }
+
 
     // MARK: - Auth (login)
 
